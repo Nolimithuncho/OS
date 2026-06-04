@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Section": {
+      "title": "Section",
+      "description": "Website structural sections metadata",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "name"]
+    },
+    "Content": {
+      "title": "Content",
+      "description": "Uploaded content details under different sections",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "section": {
+          "type": "string",
+          "enum": ["about", "canon", "documents", "gallery"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "fileUrl": {
+          "type": "string"
+        },
+        "fileType": {
+          "type": "string"
+        },
+        "imageUrl": {
+          "type": "string"
+        },
+        "link": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["published", "draft"]
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["section", "title", "status", "order"]
+    }
+  },
+  "firestore": {
+    "sections/{sectionId}": {
+      "schema": "Section",
+      "description": "Section mapping definitions"
+    },
+    "content/{contentId}": {
+      "schema": "Content",
+      "description": "Aggregated content files and descriptions"
+    }
+  }
+}

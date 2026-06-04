@@ -1,0 +1,6 @@
+{
+  "name": "Osita Chidoka Portal",
+  "description": "An intellectual directory and institutional console of Osita Chidoka featuring essays, built institutions, mentorship, and subscriber alert systems.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

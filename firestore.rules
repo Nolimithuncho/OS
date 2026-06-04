@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidPasscode(data) {
+      return data.keys().contains('passcode') && data.passcode == 'admin';
+    }
+
+    function isValidSection(data) {
+      return data.keys().hasAll(['id', 'name'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && (!data.keys().contains('description') || (data.description is string && data.description.size() <= 2048))
+        && (!data.keys().contains('passcode') || (data.passcode is string && data.passcode.size() <= 64));
+    }
+
+    function isValidContent(data) {
+      return data.keys().hasAll(['section', 'title', 'status', 'order'])
+        && data.section is string && (data.section == 'about' || data.section == 'canon' || data.section == 'documents' || data.section == 'gallery')
+        && data.title is string && data.title.size() <= 512
+        && data.description is string && data.description.size() <= 65536
+        && data.status is string && (data.status == 'published' || data.status == 'draft')
+        && data.order is int
+        && (!data.keys().contains('fileUrl') || (data.fileUrl is string && data.fileUrl.size() <= 2048))
+        && (!data.keys().contains('fileType') || (data.fileType is string && data.fileType.size() <= 64))
+        && (!data.keys().contains('imageUrl') || (data.imageUrl is string && data.imageUrl.size() <= 2048))
+        && (!data.keys().contains('link') || (data.link is string && data.link.size() <= 2048))
+        && (!data.keys().contains('createdAt') || (data.createdAt is string && data.createdAt.size() <= 128))
+        && (!data.keys().contains('updatedAt') || (data.updatedAt is string && data.updatedAt.size() <= 128))
+        && (!data.keys().contains('passcode') || (data.passcode is string && data.passcode.size() <= 64));
+    }
+
+    // Sections collection - completely read-only for public, write-protected with passcode
+    match /sections/{sectionId} {
+      allow read: if true;
+      allow create, update: if isValidId(sectionId) && isValidSection(request.resource.data) && isValidPasscode(request.resource.data);
+      allow delete: if resource.data.passcode == 'admin';
+    }
+
+    // Content collection - completely readable by public, write-protected with passcode
+    match /content/{contentId} {
+      allow read: if true;
+      allow create: if isValidId(contentId) && isValidContent(request.resource.data) && isValidPasscode(request.resource.data);
+      allow update: if isValidId(contentId) && isValidContent(request.resource.data) && isValidPasscode(request.resource.data);
+      allow delete: if resource.data.passcode == 'admin';
+    }
+  }
+}
