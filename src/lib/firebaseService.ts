@@ -1,6 +1,7 @@
 import { 
   collection, 
   getDocs, 
+  getDoc,
   addDoc, 
   updateDoc, 
   deleteDoc, 
@@ -377,3 +378,462 @@ export async function deleteContentItem(id: string): Promise<void> {
     localStorage.setItem(LOCAL_CONTENT_KEY, JSON.stringify(filtered));
   }
 }
+
+// -----------------------------------------------------
+// REAL SUBSCRIBERS SECURITY FIRESTORE SERVICES
+// -----------------------------------------------------
+const LOCAL_SUBS_KEY = 'osc_subscribers';
+
+export interface FirebaseSubscriber {
+  code: string;
+  name: string;
+  email: string;
+  interests: string[];
+  createdAt?: string;
+}
+
+export async function getSubscribers(): Promise<FirebaseSubscriber[]> {
+  if (isMockConfig) {
+    const cached = localStorage.getItem(LOCAL_SUBS_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+
+  try {
+    const colRef = collection(db, 'subscribers');
+    const snapshot = await getDocs(colRef);
+    const items = snapshot.docs.map(d => ({ email: d.id, ...d.data() } as FirebaseSubscriber));
+    localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(items));
+    return items;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.LIST, 'subscribers');
+    }
+    console.error('Firestore getSubscribers failed, returning local storage cache:', err);
+    const cached = localStorage.getItem(LOCAL_SUBS_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+}
+
+export async function createSubscriber(sub: FirebaseSubscriber): Promise<FirebaseSubscriber> {
+  const finalSub: FirebaseSubscriber = {
+    ...sub,
+    createdAt: sub.createdAt || new Date().toISOString()
+  };
+
+  if (isMockConfig) {
+    const subs = await getSubscribers();
+    const updated = [finalSub, ...subs.filter(s => s.email.toLowerCase() !== sub.email.toLowerCase())];
+    localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(updated));
+    return finalSub;
+  }
+
+  try {
+    const docRef = doc(db, 'subscribers', sub.email.toLowerCase());
+    await setDoc(docRef, finalSub);
+    const subs = await getSubscribers();
+    const updated = [finalSub, ...subs.filter(s => s.email.toLowerCase() !== sub.email.toLowerCase())];
+    localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(updated));
+    return finalSub;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.WRITE, `subscribers/${sub.email}`);
+    }
+    console.error('Firestore createSubscriber crashed, fallback to local storage:', err);
+    const subs = await getSubscribers();
+    const updated = [finalSub, ...subs.filter(s => s.email.toLowerCase() !== sub.email.toLowerCase())];
+    localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(updated));
+    return finalSub;
+  }
+}
+
+export async function getSubscriberByEmail(email: string): Promise<FirebaseSubscriber | null> {
+  if (isMockConfig) {
+    const subs = await getSubscribers();
+    return subs.find(s => s.email.toLowerCase() === email.toLowerCase()) || null;
+  }
+
+  try {
+    const docRef = doc(db, 'subscribers', email.toLowerCase());
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return { email: docSnap.id, ...docSnap.data() } as FirebaseSubscriber;
+    }
+    return null;
+  } catch (err) {
+    console.error(`Firestore getSubscriberByEmail (${email}) failed:`, err);
+    return null;
+  }
+}
+
+export async function deleteSubscriber(email: string): Promise<void> {
+  if (isMockConfig) {
+    const subs = await getSubscribers();
+    const filtered = subs.filter(s => s.email.toLowerCase() !== email.toLowerCase());
+    localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(filtered));
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'subscribers', email.toLowerCase());
+    await deleteDoc(docRef);
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.DELETE, `subscribers/${email}`);
+    }
+    console.error('Firestore deleteSubscriber fail:', err);
+  }
+}
+
+// -----------------------------------------------------
+// REAL FELLOWSHIP/MENTORSHIP APPLICATIONS FIRESTORE SERVICES
+// -----------------------------------------------------
+const LOCAL_MENTORSHIP_KEY = 'osc_mentorship_apps';
+
+export interface FirebaseMentorshipApp {
+  id: string;
+  name: string;
+  email: string;
+  discipline: string;
+  proposal: string;
+  focus: string;
+  status: 'PENDING ADMISSION REVIEW' | 'APPROVED';
+  userId?: string;
+  createdAt?: string;
+}
+
+export async function getMentorshipApps(): Promise<FirebaseMentorshipApp[]> {
+  if (isMockConfig) {
+    const cached = localStorage.getItem(LOCAL_MENTORSHIP_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+
+  try {
+    const currentUid = auth.currentUser?.uid;
+    const email = auth.currentUser?.email || '';
+    const isUserAdmin = email === 'japhetprosper13@gmail.com' || email === 'admin@chancellery.org';
+
+    let snapshot;
+    if (isUserAdmin) {
+      const colRef = collection(db, 'mentorship');
+      snapshot = await getDocs(colRef);
+    } else if (currentUid) {
+      const colRef = collection(db, 'mentorship');
+      const q = query(colRef, where('userId', '==', currentUid));
+      snapshot = await getDocs(q);
+    } else {
+      // Not logged in: no personal documents to fetch
+      const cached = localStorage.getItem(LOCAL_MENTORSHIP_KEY);
+      return cached ? JSON.parse(cached) : [];
+    }
+
+    const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FirebaseMentorshipApp));
+    localStorage.setItem(LOCAL_MENTORSHIP_KEY, JSON.stringify(items));
+    return items;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.LIST, 'mentorship');
+    }
+    console.error('Firestore getMentorships failed, fall back to local storage cache:', err);
+    const cached = localStorage.getItem(LOCAL_MENTORSHIP_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+}
+
+export async function createMentorshipApp(app: FirebaseMentorshipApp): Promise<FirebaseMentorshipApp> {
+  const finalApp: FirebaseMentorshipApp = {
+    ...app,
+    createdAt: app.createdAt || new Date().toISOString(),
+    status: app.status || 'PENDING ADMISSION REVIEW',
+    userId: app.userId || auth.currentUser?.uid || 'guest'
+  };
+
+  if (isMockConfig) {
+    const apps = await getMentorshipApps();
+    const updated = [finalApp, ...apps.filter(a => a.id !== app.id)];
+    localStorage.setItem(LOCAL_MENTORSHIP_KEY, JSON.stringify(updated));
+    return finalApp;
+  }
+
+  try {
+    const docRef = doc(db, 'mentorship', app.id);
+    await setDoc(docRef, finalApp);
+    const apps = await getMentorshipApps();
+    const updated = [finalApp, ...apps.filter(a => a.id !== app.id)];
+    localStorage.setItem(LOCAL_MENTORSHIP_KEY, JSON.stringify(updated));
+    return finalApp;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.WRITE, `mentorship/${app.id}`);
+    }
+    console.error('Firestore createMentorshipApp crash, caching offline:', err);
+    const apps = await getMentorshipApps();
+    const updated = [finalApp, ...apps.filter(a => a.id !== app.id)];
+    localStorage.setItem(LOCAL_MENTORSHIP_KEY, JSON.stringify(updated));
+    return finalApp;
+  }
+}
+
+export async function updateMentorshipAppStatus(appId: string, status: 'PENDING ADMISSION REVIEW' | 'APPROVED'): Promise<void> {
+  if (isMockConfig || appId.startsWith('mock-') || appId.startsWith('local-')) {
+    const apps = await getMentorshipApps();
+    const updated = apps.map(app => app.id === appId ? { ...app, status } : app);
+    localStorage.setItem(LOCAL_MENTORSHIP_KEY, JSON.stringify(updated));
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'mentorship', appId);
+    await updateDoc(docRef, { status });
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.UPDATE, `mentorship/${appId}`);
+    }
+    console.error('Firestore updateMentorship status failure:', err);
+  }
+}
+
+export async function deleteMentorshipApp(appId: string): Promise<void> {
+  if (isMockConfig || appId.startsWith('mock-') || appId.startsWith('local-')) {
+    const apps = await getMentorshipApps();
+    const filtered = apps.filter(app => app.id !== appId);
+    localStorage.setItem(LOCAL_MENTORSHIP_KEY, JSON.stringify(filtered));
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'mentorship', appId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.DELETE, `mentorship/${appId}`);
+    }
+    console.error('Firestore deleteMentorship failed:', err);
+  }
+}
+
+// -----------------------------------------------------
+// REAL COMMENTS SECURITY FIRESTORE SERVICES
+// -----------------------------------------------------
+const LOCAL_COMMENTS_KEY = 'osc_comments';
+
+export interface FirebaseComment {
+  id: string; // unique identification
+  essayId: string;
+  name: string;
+  text: string;
+  createdAt: string;
+  userId?: string;
+}
+
+export async function getComments(): Promise<FirebaseComment[]> {
+  if (isMockConfig) {
+    const cached = localStorage.getItem(LOCAL_COMMENTS_KEY);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  try {
+    const colRef = collection(db, 'comments');
+    const snapshot = await getDocs(colRef);
+    const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FirebaseComment));
+    localStorage.setItem(LOCAL_COMMENTS_KEY, JSON.stringify(items));
+    return items;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.LIST, 'comments');
+    }
+    console.error('Firestore getComments failed, fallback to local storage:', err);
+    const cached = localStorage.getItem(LOCAL_COMMENTS_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+}
+
+export async function createComment(cmt: Omit<FirebaseComment, 'id'>): Promise<FirebaseComment> {
+  const commentId = `comment-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+  const finalCmt: FirebaseComment = {
+    ...cmt,
+    id: commentId,
+    userId: cmt.userId || auth.currentUser?.uid || 'guest'
+  };
+
+  if (isMockConfig) {
+    const comments = await getComments();
+    const updated = [finalCmt, ...comments];
+    localStorage.setItem(LOCAL_COMMENTS_KEY, JSON.stringify(updated));
+    return finalCmt;
+  }
+
+  try {
+    const docRef = doc(db, 'comments', commentId);
+    await setDoc(docRef, finalCmt);
+    const comments = await getComments();
+    const updated = [finalCmt, ...comments];
+    localStorage.setItem(LOCAL_COMMENTS_KEY, JSON.stringify(updated));
+    return finalCmt;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.CREATE, `comments/${commentId}`);
+    }
+    console.error('Firestore createComment failed, saving locally:', err);
+    const comments = await getComments();
+    const updated = [finalCmt, ...comments];
+    localStorage.setItem(LOCAL_COMMENTS_KEY, JSON.stringify(updated));
+    return finalCmt;
+  }
+}
+
+export async function deleteComment(id: string): Promise<void> {
+  if (isMockConfig) {
+    const comments = await getComments();
+    const filtered = comments.filter(c => c.id !== id);
+    localStorage.setItem(LOCAL_COMMENTS_KEY, JSON.stringify(filtered));
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'comments', id);
+    await deleteDoc(docRef);
+    const comments = await getComments();
+    const filtered = comments.filter(c => c.id !== id);
+    localStorage.setItem(LOCAL_COMMENTS_KEY, JSON.stringify(filtered));
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.DELETE, `comments/${id}`);
+    }
+    console.error('Firestore deleteComment crashed:', err);
+  }
+}
+
+export interface FirebaseAdmin {
+  email: string;
+  addedAt: string;
+}
+
+const LOCAL_ADMINS_KEY = 'osc_firebase_admins';
+const LOCAL_PASSPHRASE_KEY = 'osc_firebase_passphrase';
+
+export async function getAdmins(): Promise<FirebaseAdmin[]> {
+  if (isMockConfig) {
+    const cached = localStorage.getItem(LOCAL_ADMINS_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+
+  try {
+    const colRef = collection(db, 'admins');
+    const snapshot = await getDocs(colRef);
+    const items = snapshot.docs.map(d => ({ email: d.id, ...d.data() } as FirebaseAdmin));
+    localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(items));
+    return items;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.LIST, 'admins');
+    }
+    console.error('Firestore getAdmins failed, returning local cache:', err);
+    const cached = localStorage.getItem(LOCAL_ADMINS_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+}
+
+export async function createAdmin(email: string): Promise<FirebaseAdmin> {
+  const finalAdmin: FirebaseAdmin = {
+    email: email.toLowerCase().trim(),
+    addedAt: new Date().toISOString()
+  };
+
+  if (isMockConfig) {
+    const admins = await getAdmins();
+    const updated = [finalAdmin, ...admins.filter(a => a.email !== finalAdmin.email)];
+    localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(updated));
+    return finalAdmin;
+  }
+
+  try {
+    const docRef = doc(db, 'admins', finalAdmin.email);
+    await setDoc(docRef, finalAdmin);
+    const admins = await getAdmins();
+    const updated = [finalAdmin, ...admins.filter(a => a.email !== finalAdmin.email)];
+    localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(updated));
+    return finalAdmin;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.WRITE, `admins/${finalAdmin.email}`);
+    }
+    console.error('Firestore createAdmin crashed, fallback to local storage:', err);
+    const admins = await getAdmins();
+    const updated = [finalAdmin, ...admins.filter(a => a.email !== finalAdmin.email)];
+    localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(updated));
+    return finalAdmin;
+  }
+}
+
+export async function deleteAdmin(email: string): Promise<void> {
+  const cleanEmail = email.toLowerCase().trim();
+  if (isMockConfig) {
+    const admins = await getAdmins();
+    const filtered = admins.filter(a => a.email !== cleanEmail);
+    localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(filtered));
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'admins', cleanEmail);
+    await deleteDoc(docRef);
+    const admins = await getAdmins();
+    const filtered = admins.filter(a => a.email !== cleanEmail);
+    localStorage.setItem(LOCAL_ADMINS_KEY, JSON.stringify(filtered));
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.DELETE, `admins/${cleanEmail}`);
+    }
+    console.error('Firestore deleteAdmin crashed:', err);
+  }
+}
+
+export async function getAdminPassphrase(): Promise<string> {
+  if (isMockConfig) {
+    return localStorage.getItem(LOCAL_PASSPHRASE_KEY) || 'admin';
+  }
+
+  try {
+    const docRef = doc(db, 'config', 'admin_passphrase');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      if (data && data.passphrase) {
+        localStorage.setItem(LOCAL_PASSPHRASE_KEY, data.passphrase);
+        return data.passphrase;
+      }
+    }
+    const cached = localStorage.getItem(LOCAL_PASSPHRASE_KEY);
+    return cached || 'admin';
+  } catch (err) {
+    console.error('Firestore getAdminPassphrase failed, using custom local cache:', err);
+    return localStorage.getItem(LOCAL_PASSPHRASE_KEY) || 'admin';
+  }
+}
+
+export async function updateAdminPassphrase(passphrase: string): Promise<void> {
+  const cleanPass = passphrase.trim();
+  if (isMockConfig) {
+    localStorage.setItem(LOCAL_PASSPHRASE_KEY, cleanPass);
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'config', 'admin_passphrase');
+    await setDoc(docRef, { passphrase: cleanPass });
+    localStorage.setItem(LOCAL_PASSPHRASE_KEY, cleanPass);
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.WRITE, 'config/admin_passphrase');
+    }
+    console.error('Firestore updateAdminPassphrase crashed:', err);
+  }
+}
+

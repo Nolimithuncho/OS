@@ -7,21 +7,61 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Helper functions
+    // Primitive Helpers
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-+]+$');
+    }
+    
+    function isValidEmailId(id) {
+      return id is string && id.size() <= 128;
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+    
+    function existing() {
+      return resource.data;
+    }
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    // Verify that the user's email is authenticated and validated.
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    
+    // Admin access check. Validates using the bootstrapped workspace email, official chancellery admin, or database admin records.
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'japhetprosper13@gmail.com' 
+        || request.auth.token.email == 'admin@chancellery.org'
+        || exists(/databases/$(database)/documents/admins/$(request.auth.token.email))
+      );
     }
 
-    function isValidPasscode(data) {
-      return data.keys().contains('passcode') && data.passcode == 'admin';
+    // Entity validation helpers
+    function isValidAdminDoc(data) {
+      return data.keys().hasAll(['email'])
+        && data.keys().size() >= 1
+        && data.email is string && data.email.size() <= 256
+        && (!('addedAt' in data) || (data.addedAt is string && data.addedAt.size() <= 128));
+    }
+
+    function isValidConfigDoc(data) {
+      return data.keys().hasAll(['passphrase'])
+        && data.keys().size() == 1
+        && data.passphrase is string && data.passphrase.size() <= 128;
     }
 
     function isValidSection(data) {
       return data.keys().hasAll(['id', 'name'])
+        && data.keys().size() >= 2
         && data.id is string && data.id.size() <= 128
         && data.name is string && data.name.size() <= 256
-        && (!data.keys().contains('description') || (data.description is string && data.description.size() <= 2048))
-        && (!data.keys().contains('passcode') || (data.passcode is string && data.passcode.size() <= 64));
+        && (!('description' in data) || (data.description is string && data.description.size() <= 2048));
     }
 
     function isValidContent(data) {
@@ -31,28 +71,117 @@ service cloud.firestore {
         && data.description is string && data.description.size() <= 65536
         && data.status is string && (data.status == 'published' || data.status == 'draft')
         && data.order is int
-        && (!data.keys().contains('fileUrl') || (data.fileUrl is string && data.fileUrl.size() <= 2048))
-        && (!data.keys().contains('fileType') || (data.fileType is string && data.fileType.size() <= 64))
-        && (!data.keys().contains('imageUrl') || (data.imageUrl is string && data.imageUrl.size() <= 2048))
-        && (!data.keys().contains('link') || (data.link is string && data.link.size() <= 2048))
-        && (!data.keys().contains('createdAt') || (data.createdAt is string && data.createdAt.size() <= 128))
-        && (!data.keys().contains('updatedAt') || (data.updatedAt is string && data.updatedAt.size() <= 128))
-        && (!data.keys().contains('passcode') || (data.passcode is string && data.passcode.size() <= 64));
+        && (!('fileUrl' in data) || (data.fileUrl is string && data.fileUrl.size() <= 2048))
+        && (!('fileType' in data) || (data.fileType is string && data.fileType.size() <= 64))
+        && (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 2048))
+        && (!('link' in data) || (data.link is string && data.link.size() <= 2048))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 128))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 128));
     }
 
-    // Sections collection - completely read-only for public, write-protected with passcode
+    function isValidSubscriber(data) {
+      return data.keys().hasAll(['code', 'name', 'email'])
+        && data.code is string && data.code.size() <= 64
+        && data.name is string && data.name.size() <= 256
+        && data.email is string && data.email.size() <= 256
+        && (!('interests' in data) || (data.interests is list))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 128));
+    }
+
+    function isValidMentorshipApp(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'discipline', 'proposal', 'focus', 'status'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && data.email is string && data.email.size() <= 256
+        && data.discipline is string && data.discipline.size() <= 1024
+        && data.proposal is string && data.proposal.size() <= 16384
+        && data.focus is string && data.focus.size() <= 512
+        && data.status is string && (data.status == 'PENDING ADMISSION REVIEW' || data.status == 'APPROVED')
+        && (!('userId' in data) || (data.userId is string && data.userId.size() <= 128))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 128));
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['essayId', 'name', 'text', 'createdAt'])
+        && data.essayId is string && data.essayId.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && data.text is string && data.text.size() <= 4096
+        && data.createdAt is string && data.createdAt.size() <= 128
+        && (!('userId' in data) || (data.userId is string && data.userId.size() <= 128));
+    }
+
+    // Rules Mapping
+    
+    // 1. Sections - Public, managed by Admin
     match /sections/{sectionId} {
       allow read: if true;
-      allow create, update: if isValidId(sectionId) && isValidSection(request.resource.data) && isValidPasscode(request.resource.data);
-      allow delete: if resource.data.passcode == 'admin';
+      allow write: if isAdmin() && isValidId(sectionId) && isValidSection(incoming());
     }
 
-    // Content collection - completely readable by public, write-protected with passcode
+    // 2. Content CMS - Public, managed by Admin
     match /content/{contentId} {
       allow read: if true;
-      allow create: if isValidId(contentId) && isValidContent(request.resource.data) && isValidPasscode(request.resource.data);
-      allow update: if isValidId(contentId) && isValidContent(request.resource.data) && isValidPasscode(request.resource.data);
-      allow delete: if resource.data.passcode == 'admin';
+      allow write: if isAdmin() && isValidId(contentId) && isValidContent(incoming());
+    }
+
+    // 3. Subscribers - Read by Admin & Owned User, created by self/any, deleted by Admin
+    match /subscribers/{email} {
+      allow read: if isAdmin() 
+        || (isVerified() && request.auth.token.email == email);
+      
+      allow create: if isValidEmailId(email) 
+        && isValidSubscriber(incoming()) 
+        && (isAdmin() || (isVerified() && request.auth.token.email == email));
+        
+      allow update: if isValidEmailId(email) 
+        && isValidSubscriber(incoming()) 
+        && (isAdmin() || (isVerified() && request.auth.token.email == email && incoming().code == existing().code));
+        
+      allow delete: if isAdmin();
+    }
+
+    // 4. Mentorship Apps - Read by Admin & Subscribed Owner, modified by Admin & Subscribed Owner
+    match /mentorship/{appId} {
+      allow read: if isAdmin() 
+        || (isVerified() && existing().userId == request.auth.uid);
+        
+      allow create: if isValidId(appId) 
+        && isValidMentorshipApp(incoming()) 
+        && (isAdmin() || (isVerified() && incoming().userId == request.auth.uid && incoming().status == 'PENDING ADMISSION REVIEW'));
+        
+      allow update: if isValidId(appId) 
+        && isValidMentorshipApp(incoming()) 
+        && (
+          isAdmin() 
+          || (isVerified() && existing().userId == request.auth.uid && incoming().userId == request.auth.uid && incoming().status == 'PENDING ADMISSION REVIEW' && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'discipline', 'proposal', 'focus']))
+        );
+        
+      allow delete: if isAdmin();
+    }
+
+    // 5. Essay Comments - Public reading, created by authenticated users, moderated by Admin & Author
+    match /comments/{commentId} {
+      allow read: if true;
+      
+      allow create: if isValidId(commentId) 
+        && isValidComment(incoming()) 
+        && (isAdmin() || (isVerified() && incoming().userId == request.auth.uid));
+        
+      allow update: if false; // Comments are immutable once compiled and published!
+      
+      allow delete: if isAdmin() || (isVerified() && existing().userId == request.auth.uid);
+    }
+
+    // 6. Admins Directory - Readable by signed-in users, writable by existing Admins
+    match /admins/{email} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidEmailId(email) && isValidAdminDoc(incoming());
+    }
+
+    // 7. General Configuration (custom entry passphrase) - Publicly readable, writeable by Admins
+    match /config/{documentId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidId(documentId) && isValidConfigDoc(incoming());
     }
   }
 }

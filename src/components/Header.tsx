@@ -8,18 +8,19 @@ interface HeaderProps {
   setActivePage: (page: string) => void;
   essays: Essay[];
   onReadEssay: (essayId: string) => void;
+  currentUser?: any;
 }
 
-export const Header: React.FC<HeaderProps> = ({ activePage, setActivePage, essays, onReadEssay }) => {
+export const Header: React.FC<HeaderProps> = ({ activePage, setActivePage, essays, onReadEssay, currentUser }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showResults, setShowResults] = useState(false);
 
   const navLinks = [
     { id: 'home', label: 'Home' },
-    { id: 'about', label: 'About' },
     { id: 'canon', label: 'The Canon' },
-    { id: 'mentorship', label: 'Mentorship' }
+    { id: 'mentorship', label: 'Mentorship' },
+    { id: 'about', label: 'About' }
   ];
 
   const handleNavClick = (pageId: string) => {
@@ -38,25 +39,25 @@ export const Header: React.FC<HeaderProps> = ({ activePage, setActivePage, essay
 
   return (
     <nav className="sticky top-0 z-50 bg-[#F7F3EC] border-b border-[#D8D0C0] shadow-sm">
-      <div className="max-w-[1200px] mx-auto px-6 sm:px-12 md:px-16 h-[58px] flex items-center justify-between">
+      <div className="max-w-[1220px] mx-auto px-4 sm:px-6 md:px-8 lg:px-12 xl:px-16 h-[58px] flex items-center justify-between">
         <button
           onClick={() => handleNavClick('home')}
-          className="font-serif text-[18px] sm:text-[20px] font-black text-[#121212] tracking-tight hover:text-[#9B7A2F] transition-colors cursor-pointer bg-transparent border-none outline-none"
+          className="font-serif text-[18px] md:text-[16px] lg:text-[19px] xl:text-[21px] font-black text-[#121212] tracking-tight hover:text-[#9B7A2F] transition-colors cursor-pointer bg-transparent border-none outline-none focus:outline-none"
         >
           Osita Chidoka
         </button>
 
         {/* Desktop Container */}
-        <div className="hidden sm:flex items-center gap-6 md:gap-7">
+        <div className="hidden md:flex items-center gap-3.5 lg:gap-6 xl:gap-8">
           {/* Main Navigation Links */}
-          <ul className="flex gap-6 md:gap-[1.8rem] list-none m-0 p-0 items-center">
+          <ul className="flex gap-3 lg:gap-5 xl:gap-[1.8rem] list-none m-0 p-0 items-center">
             {navLinks.map((item) => {
               const isActive = activePage === item.id;
               return (
                 <li key={item.id} className="relative">
                   <button
                     onClick={() => handleNavClick(item.id)}
-                    className={`font-sans text-[11px] md:text-[11.5px] font-bold tracking-widest uppercase cursor-pointer bg-transparent border-none outline-none py-1 transition-colors ${
+                    className={`font-sans text-[10px] lg:text-[11px] xl:text-[11.5px] font-bold tracking-widest uppercase cursor-pointer bg-transparent border-none outline-none py-1 transition-colors ${
                       isActive ? 'text-[#121212]' : 'text-[#7A7A7A] hover:text-[#121212]'
                     }`}
                   >
@@ -74,10 +75,10 @@ export const Header: React.FC<HeaderProps> = ({ activePage, setActivePage, essay
             })}
           </ul>
 
-          {/* Minimal Underlined Search Bar (Styled after Reference Image) */}
-          <div className="relative flex items-center ml-2">
+          {/* Minimal Underlined Search Bar */}
+          <div className="relative flex items-center xl:ml-2">
             <div className="flex items-center border-b border-[#D8D0C0] pb-1 bg-transparent px-0.5 focus-within:border-[#9B7A2F] transition-colors duration-200">
-              <Search size={14} className="text-[#9B7A2F] mr-1.5 flex-shrink-0" />
+              <Search size={12} className="text-[#9B7A2F] mr-1 lg:mr-1.5 flex-shrink-0" />
               <input
                 type="text"
                 value={searchQuery}
@@ -91,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({ activePage, setActivePage, essay
                   setTimeout(() => setShowResults(false), 250);
                 }}
                 placeholder="Search..."
-                className="bg-transparent border-none outline-none text-[11px] font-sans w-[90px] md:w-[130px] focus:w-[120px] md:focus:w-[160px] transition-all duration-300 placeholder-[#7A7A7A]/70 text-[#121212] py-0"
+                className="bg-transparent border-none outline-none text-[10px] lg:text-[11px] font-sans w-[60px] lg:w-[100px] xl:w-[130px] focus:w-[90px] lg:focus:w-[124px] xl:focus:w-[160px] transition-all duration-300 placeholder-[#7A7A7A]/70 text-[#121212] py-0"
               />
               {searchQuery && (
                 <button
@@ -153,23 +154,26 @@ export const Header: React.FC<HeaderProps> = ({ activePage, setActivePage, essay
             </AnimatePresence>
           </div>
 
-          {/* Outlined "Sign In" Box Button (Styled after Reference Image) */}
-          <button
-            onClick={() => handleNavClick('admin')}
-            className={`font-sans text-[11px] font-bold tracking-widest uppercase cursor-pointer bg-transparent border border-[#C5BCAC] hover:border-[#121212] px-[16px] py-[6px] rounded-none text-[#121212] transition-colors hover:bg-[#121212]/5 outline-none`}
-          >
-            Sign In
-          </button>
+          {/* Outlined "Sign In" Box Button - Only visible when already authorized as admin */}
+          {currentUser?.role === 'admin' && (
+            <button
+              onClick={() => handleNavClick('admin')}
+              className="font-sans text-[10px] lg:text-[11px] font-bold tracking-widest uppercase cursor-pointer bg-transparent border border-[#C5BCAC] hover:border-[#121212] px-2.5 py-1.5 lg:px-4 lg:py-[6px] rounded-none text-[#121212] transition-colors hover:bg-[#121212]/5 outline-none flex items-center gap-1.5"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Dashboard</span>
+            </button>
+          )}
 
-          {/* Subscribe Button (Shifted after Sign In) */}
+          {/* Subscribe Button */}
           <button
             onClick={() => handleNavClick('subscribe')}
-            className={`group flex items-center gap-1.5 font-sans text-[11px] font-bold tracking-widest uppercase cursor-pointer bg-[#9B7A2F] text-[#FAF8F5] border border-[#9B7A2F] hover:bg-[#121212] hover:border-[#121212] px-4 py-[6px] rounded-sm transition-all duration-200 outline-none`}
+            className={`group flex items-center gap-1 lg:gap-1.5 font-sans text-[10px] lg:text-[11px] font-bold tracking-widest uppercase cursor-pointer bg-[#9B7A2F] text-[#FAF8F5] border border-[#9B7A2F] hover:bg-[#121212] hover:border-[#121212] px-3 py-1.5 lg:px-4 lg:py-[6px] rounded-sm transition-all duration-200 outline-none`}
           >
             <span>Subscribe</span>
             <ArrowRight 
               size={11} 
-              className="transform group-hover:translate-x-1 transition-transform duration-200" 
+              className="transform group-hover:translate-x-1 transition-transform duration-200 hidden lg:inline" 
             />
           </button>
         </div>
@@ -177,7 +181,7 @@ export const Header: React.FC<HeaderProps> = ({ activePage, setActivePage, essay
         {/* Hamburger / Close Icon */}
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex sm:hidden p-1 text-[#121212] hover:text-[#9B7A2F] transition-colors bg-transparent border-none outline-none cursor-pointer"
+          className="flex md:hidden p-1 text-[#121212] hover:text-[#9B7A2F] transition-colors bg-transparent border-none outline-none cursor-pointer"
           aria-label="Toggle Navigation Menu"
         >
           {isOpen ? <X size={20} /> : <Menu size={20} />}
@@ -190,7 +194,7 @@ export const Header: React.FC<HeaderProps> = ({ activePage, setActivePage, essay
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="sm:hidden absolute top-[58px] left-0 right-0 bg-[#F7F3EC] border-b border-[#D8D0C0] px-6 py-5 flex flex-col gap-4 shadow-lg z-50 animate-fade-in"
+            className="md:hidden absolute top-[58px] left-0 right-0 bg-[#F7F3EC] border-b border-[#D8D0C0] px-6 py-5 flex flex-col gap-4 shadow-lg z-50"
           >
             {/* Mobile Search Bar */}
             <div className="relative w-full mb-1">
@@ -260,15 +264,18 @@ export const Header: React.FC<HeaderProps> = ({ activePage, setActivePage, essay
               );
             })}
 
-            {/* Mobile Sign In */}
-            <button
-              onClick={() => handleNavClick('admin')}
-              className={`font-sans text-[13px] font-semibold tracking-widest uppercase text-left py-2 border-b border-dashed border-[#D8D0C0]/50 bg-transparent outline-none cursor-pointer ${
-                activePage === 'admin' ? 'text-[#121212] font-semibold' : 'text-[#7A7A7A]'
-              }`}
-            >
-              Sign In
-            </button>
+            {/* Mobile Sign In - Only visible when already authorized as admin */}
+            {currentUser?.role === 'admin' && (
+              <button
+                onClick={() => handleNavClick('admin')}
+                className={`font-sans text-[13px] font-semibold tracking-widest uppercase text-left py-2 border-b border-dashed border-[#D8D0C0]/50 bg-transparent outline-none cursor-pointer flex items-center gap-1.5 ${
+                  activePage === 'admin' ? 'text-[#121212] font-semibold' : 'text-[#7A7A7A]'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Dashboard Portal</span>
+              </button>
+            )}
 
             {/* Mobile Subscribe */}
             <button

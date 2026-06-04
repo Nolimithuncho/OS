@@ -7,12 +7,51 @@ import { Mentorship } from './components/Mentorship';
 import { About } from './components/About';
 import { Subscribe } from './components/Subscribe';
 import { Admin } from './components/Admin';
-import { ContentItem, getContentItems, isMockConfig } from './lib/firebaseService';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
+import { 
+  ContentItem, 
+  getContentItems, 
+  isMockConfig,
+  getSubscribers, 
+  getSubscriberByEmail,
+  createSubscriber, 
+  deleteSubscriber,
+  getMentorshipApps, 
+  createMentorshipApp, 
+  updateMentorshipAppStatus, 
+  deleteMentorshipApp,
+  getComments, 
+  createComment, 
+  deleteComment,
+  FirebaseComment,
+  getAdmins
+} from './lib/firebaseService';
 import { initialEssays } from './data';
 import { Essay, Subscriber, MentorshipApp, Comment, User } from './types';
 
 export default function App() {
-  const [activePage, setActivePage] = useState<string>('home');
+  const [activePage, setActivePage] = useState<string>(() => {
+    const pathname = window.location.pathname;
+    const hash = window.location.hash;
+    const search = window.location.search;
+    if (pathname === '/admin' || pathname.endsWith('/admin') || hash === '#/admin' || hash === '#admin' || search.includes('admin') || search.includes('page=admin')) {
+      return 'admin';
+    }
+    if (pathname === '/canon' || hash === '#/canon' || hash === '#canon') {
+      return 'canon';
+    }
+    if (pathname === '/mentorship' || hash === '#/mentorship' || hash === '#mentorship') {
+      return 'mentorship';
+    }
+    if (pathname === '/about' || hash === '#/about' || hash === '#about') {
+      return 'about';
+    }
+    if (pathname === '/subscribe' || hash === '#/subscribe' || hash === '#subscribe') {
+      return 'subscribe';
+    }
+    return 'home';
+  });
   const [selectedEssayId, setSelectedEssayId] = useState<string | null>(null);
 
   // Firestore Dynamic Content state
@@ -127,12 +166,179 @@ export default function App() {
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
+  // Sync additional Firestore collections
+  const syncFirestoreCollections = async (isAdminUser?: boolean) => {
+    try {
+      // 1. Fetch Subscribers from Firestore (available for fully registered elements)
+      if (isAdminUser) {
+        const subs = await getSubscribers();
+        if (subs && subs.length > 0) {
+          setSubscribersList(subs as any);
+        }
+      }
+
+      // 2. Fetch Mentorship applications
+      const apps = await getMentorshipApps();
+      if (apps && apps.length > 0) {
+        setMentorshipApps(apps as any);
+      }
+
+      // 3. Fetch comments
+      const rawComments = await getComments();
+      if (rawComments && rawComments.length > 0) {
+        const newCommentsMap: Record<string, Comment[]> = {};
+        rawComments.forEach((c) => {
+          if (!newCommentsMap[c.essayId]) {
+            newCommentsMap[c.essayId] = [];
+          }
+          newCommentsMap[c.essayId].push({
+            name: c.name,
+            text: c.text,
+            date: new Date(c.createdAt).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric'
+            }),
+            id: c.id,
+            userId: c.userId
+          } as any);
+        });
+        setCommentsMap(newCommentsMap);
+      }
+    } catch (err) {
+      console.error("Failed to sync Firestore collections on runtime:", err);
+    }
+  };
+
+  // Setup actual Firebase Authentication Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const email = firebaseUser.email || '';
+        const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Authorized User';
+        
+        // Boostrapped admin list verification or database-configured admins
+        const systemAdmins = ['japhetprosper13@gmail.com', 'admin@chancellery.org'];
+        let isUserAdmin = systemAdmins.includes(email.toLowerCase().trim());
+        
+        if (!isUserAdmin) {
+          try {
+            const extraAdmins = await getAdmins();
+            isUserAdmin = extraAdmins.some(a => a.email.toLowerCase().trim() === email.toLowerCase().trim());
+          } catch (e) {
+            console.error("Firestore admin email check failed:", e);
+          }
+        }
+        
+        if (isUserAdmin) {
+          setCurrentUser({
+            role: 'admin',
+            email: email,
+            name: name
+          });
+        } else {
+          try {
+            // Check subscribers securely by single document ID lookup
+            const foundSub = await getSubscriberByEmail(email);
+            
+            if (foundSub) {
+              setCurrentUser({
+                role: 'subscriber',
+                email: email,
+                name: foundSub.name || name,
+                code: foundSub.code
+              });
+            } else {
+              // Create dynamic subscriber record on authenticating
+              const randomCode = 'OSC-SUB-' + Math.floor(100 + Math.random() * 900);
+              const temporarySub = {
+                code: randomCode,
+                name: name,
+                email: email,
+                interests: ["Essays & Memoirs"]
+              };
+              
+              await createSubscriber(temporarySub);
+              setCurrentUser({
+                role: 'subscriber',
+                email: email,
+                name: name,
+                code: randomCode
+              });
+            }
+          } catch (e) {
+            // Fallback for simple subscribers offline tracking
+            setCurrentUser({
+              role: 'subscriber',
+              email: email,
+              name: name,
+              code: 'OSC-SUB-' + Math.floor(100 + Math.random() * 900)
+            });
+          }
+        }
+      } else {
+        setCurrentUser(null);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, []);
+
+  // Synchronize routing state on browser back/forward buttons or hash change
+  useEffect(() => {
+    const handleUrlRouting = () => {
+      const pathname = window.location.pathname;
+      const hash = window.location.hash;
+      const search = window.location.search;
+
+      let page = 'home';
+      if (pathname === '/admin' || pathname.endsWith('/admin') || hash === '#/admin' || hash === '#admin' || search.includes('admin') || search.includes('page=admin')) {
+        page = 'admin';
+      } else if (pathname === '/canon' || hash === '#/canon' || hash === '#canon') {
+        page = 'canon';
+      } else if (pathname === '/mentorship' || hash === '#/mentorship' || hash === '#mentorship') {
+        page = 'mentorship';
+      } else if (pathname === '/about' || hash === '#/about' || hash === '#about') {
+        page = 'about';
+      } else if (pathname === '/subscribe' || hash === '#/subscribe' || hash === '#subscribe') {
+        page = 'subscribe';
+      }
+
+      setActivePage(page);
+
+      // Extract optional essay param securely
+      const searchParams = new URLSearchParams(window.location.search);
+      const essayId = searchParams.get('essay');
+      if (essayId) {
+        setSelectedEssayId(essayId);
+      } else if (page !== 'canon') {
+        setSelectedEssayId(null);
+      }
+    };
+
+    window.addEventListener('popstate', handleUrlRouting);
+    window.addEventListener('hashchange', handleUrlRouting);
+
+    // Run initial check for custom query parameters
+    const searchParams = new URLSearchParams(window.location.search);
+    const essayId = searchParams.get('essay');
+    if (essayId) {
+      setSelectedEssayId(essayId);
+    }
+
+    return () => {
+      window.removeEventListener('popstate', handleUrlRouting);
+      window.removeEventListener('hashchange', handleUrlRouting);
+    };
+  }, []);
+
   // Load and refresh content based on currentUser context
   useEffect(() => {
     refreshContent(currentUser?.role === 'admin');
+    syncFirestoreCollections(currentUser?.role === 'admin');
   }, [currentUser]);
 
-  // Synchronizers to sync local store
+  // Synchronizers to sync local store fallback
   useEffect(() => {
     localStorage.setItem('osc_essays', JSON.stringify(essaysList));
   }, [essaysList]);
@@ -149,43 +355,124 @@ export default function App() {
     localStorage.setItem('osc_comments', JSON.stringify(commentsMap));
   }, [commentsMap]);
 
-  // Action dispatches to manipulate shared structures
-  const handleAddNewSubscriber = (sub: Subscriber) => {
-    setSubscribersList((prev) => {
-      const exists = prev.some((s) => s.email.toLowerCase() === sub.email.toLowerCase());
-      if (exists) return prev;
-      return [sub, ...prev];
-    });
+  // Action dispatches to manipulate shared structures with Firestore endpoints
+  const handleAddNewSubscriber = async (sub: Subscriber) => {
+    try {
+      const addedSub = await createSubscriber({
+        code: sub.code,
+        name: sub.name,
+        email: sub.email,
+        interests: sub.interests
+      });
+      setSubscribersList((prev) => {
+        const filtered = prev.filter((s) => s.email.toLowerCase() !== sub.email.toLowerCase());
+        return [addedSub, ...filtered];
+      });
+    } catch (err) {
+      console.error("Subscriber write fallback:", err);
+      setSubscribersList((prev) => {
+        const exists = prev.some((s) => s.email.toLowerCase() === sub.email.toLowerCase());
+        if (exists) return prev;
+        return [sub, ...prev];
+      });
+    }
   };
 
   const handleAddNewEssay = (essay: Essay) => {
     setEssaysList((prev) => [essay, ...prev]);
   };
 
-  const handleApplyMentorship = (app: MentorshipApp) => {
-    setMentorshipApps((prev) => [app, ...prev]);
+  const handleApplyMentorship = async (app: MentorshipApp) => {
+    try {
+      const createdApp = await createMentorshipApp({
+        id: app.id,
+        name: app.name,
+        email: app.email,
+        discipline: app.discipline,
+        proposal: app.proposal,
+        focus: app.focus,
+        status: app.status,
+        userId: auth.currentUser?.uid || 'guest'
+      });
+      setMentorshipApps((prev) => [createdApp as any, ...prev.filter(a => a.id !== app.id)]);
+    } catch (err) {
+      console.error("Mentorship apply fallback:", err);
+      setMentorshipApps((prev) => [app, ...prev]);
+    }
   };
 
-  const handleUpdateMentorshipStatus = (appId: string, status: 'PENDING ADMISSION REVIEW' | 'APPROVED') => {
-    setMentorshipApps((prev) =>
-      prev.map((app) => (app.id === appId ? { ...app, status } : app))
-    );
+  const handleUpdateMentorshipStatus = async (appId: string, status: 'PENDING ADMISSION REVIEW' | 'APPROVED') => {
+    try {
+      await updateMentorshipAppStatus(appId, status);
+      setMentorshipApps((prev) =>
+        prev.map((app) => (app.id === appId ? { ...app, status } : app))
+      );
+    } catch (err) {
+      console.error("Mentorship state write failure:", err);
+      setMentorshipApps((prev) =>
+        prev.map((app) => (app.id === appId ? { ...app, status } : app))
+      );
+    }
   };
 
-  const handleDeleteMentorshipApp = (appId: string) => {
-    setMentorshipApps((prev) => prev.filter((app) => app.id !== appId));
+  const handleDeleteMentorshipApp = async (appId: string) => {
+    try {
+      await deleteMentorshipApp(appId);
+      setMentorshipApps((prev) => prev.filter((app) => app.id !== appId));
+    } catch (err) {
+      console.error("Mentorship delete failure:", err);
+      setMentorshipApps((prev) => prev.filter((app) => app.id !== appId));
+    }
   };
 
-  const handleAddComment = (essayId: string, newComment: Comment) => {
-    setCommentsMap((prev) => ({
-      ...prev,
-      [essayId]: [...(prev[essayId] || []), newComment]
-    }));
+  const handleAddComment = async (essayId: string, newComment: Comment) => {
+    try {
+      const createdCmt = await createComment({
+        essayId,
+        name: newComment.name,
+        text: newComment.text,
+        createdAt: new Date().toISOString(),
+        userId: auth.currentUser?.uid || 'guest'
+      });
+      
+      const mappedCmt: Comment = {
+        name: createdCmt.name,
+        text: createdCmt.text,
+        date: new Date(createdCmt.createdAt).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        }),
+        id: createdCmt.id,
+        userId: createdCmt.userId
+      } as any;
+
+      setCommentsMap((prev) => ({
+        ...prev,
+        [essayId]: [...(prev[essayId] || []), mappedCmt]
+      }));
+    } catch (err) {
+      console.error("Comment create failure:", err);
+      setCommentsMap((prev) => ({
+        ...prev,
+        [essayId]: [...(prev[essayId] || []), newComment]
+      }));
+    }
   };
 
-  const handleDeleteComment = (essayId: string, index: number) => {
+  const handleDeleteComment = async (essayId: string, index: number) => {
+    const list = commentsMap[essayId] || [];
+    const targetCmt = list[index] as any;
+
+    if (targetCmt && targetCmt.id) {
+      try {
+        await deleteComment(targetCmt.id);
+      } catch (err) {
+        console.error("Comment delete failure:", err);
+      }
+    }
+
     setCommentsMap((prev) => {
-      const list = prev[essayId] || [];
       const updatedList = list.filter((_, idx) => idx !== index);
       return {
         ...prev,
@@ -222,6 +509,12 @@ export default function App() {
     setSelectedEssayId(essayId);
     setActivePage('canon');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Smoothly push path history
+    const targetPath = `/canon?essay=${essayId}`;
+    if (window.location.pathname + window.location.search !== targetPath) {
+      window.history.pushState({ page: 'canon', essayId }, '', targetPath);
+    }
   };
 
   const handlePageNavigation = (pageId: string) => {
@@ -229,6 +522,13 @@ export default function App() {
       setSelectedEssayId(null);
     }
     setActivePage(pageId);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Smoothly push page pathname history
+    const targetPath = pageId === 'home' ? '/' : `/${pageId}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ page: pageId }, '', targetPath);
+    }
   };
 
   const renderActiveRoute = () => {
@@ -249,16 +549,17 @@ export default function App() {
             parentEssaysList={mergedEssaysList}
             parentCommentsMap={commentsMap}
             onAddComment={handleAddComment}
+            currentUser={currentUser}
           />
         );
       case 'mentorship':
         return (
-          <Mentorship parentApps={mentorshipApps} onApplyApp={handleApplyMentorship} />
+          <Mentorship parentApps={mentorshipApps} onApplyApp={handleApplyMentorship} currentUser={currentUser} />
         );
       case 'about':
         return <About items={contentItems} />;
       case 'subscribe':
-        return <Subscribe onAddSubscriber={handleAddNewSubscriber} />;
+        return <Subscribe onAddSubscriber={handleAddNewSubscriber} currentUser={currentUser} />;
       case 'admin':
         return (
           <Admin
@@ -296,6 +597,7 @@ export default function App() {
           setActivePage={handlePageNavigation} 
           essays={mergedEssaysList}
           onReadEssay={handleReadEssayDirectly}
+          currentUser={currentUser}
         />
         <main>{renderActiveRoute()}</main>
       </div>

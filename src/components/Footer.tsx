@@ -63,12 +63,6 @@ export const Footer: React.FC<FooterProps> = ({ setActivePage }) => {
               >
                 Subscribe
               </button>
-              <button
-                onClick={() => navigateTo('admin')}
-                className="text-left font-sans text-[14px] text-[#444444] hover:text-[#121212] transition-colors font-semibold cursor-pointer bg-transparent border-none p-0 outline-none"
-              >
-                Sign In
-              </button>
             </div>
           </div>
 

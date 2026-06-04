@@ -2,8 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LogOut, BookOpen, Users, MessageSquare, PlusCircle, CheckCircle, Trash2, Key, AlertCircle, FileText, Search, ShieldAlert, BadgeInfo, FolderEdit, Settings, Edit3, Image, FileUp, Globe, Eye, EyeOff, Loader2, Mail, ArrowRight } from 'lucide-react';
 import { Essay, Subscriber, MentorshipApp, Comment, User } from '../types';
-import { ContentItem, uploadFile, createContentItem, updateContentItem, deleteContentItem, isMockConfig } from '../lib/firebaseService';
-import { signOut } from 'firebase/auth';
+import { ContentItem, uploadFile, createContentItem, updateContentItem, deleteContentItem, isMockConfig, FirebaseAdmin, getAdmins, createAdmin, deleteAdmin, getAdminPassphrase, updateAdminPassphrase } from '../lib/firebaseService';
+import { signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../firebase';
 
 interface AdminProps {
@@ -45,8 +45,15 @@ export const Admin: React.FC<AdminProps> = ({
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Dashboard navigation tab: 'overview' | 'essays' | 'subscribers' | 'mentorship' | 'comments' | 'cms'
-  const [activeTab, setActiveTab] = useState<'overview' | 'essays' | 'subscribers' | 'mentorship' | 'comments' | 'cms'>('overview');
+  // Dashboard navigation tab: 'overview' | 'essays' | 'subscribers' | 'mentorship' | 'comments' | 'cms' | 'settings'
+  const [activeTab, setActiveTab] = useState<'overview' | 'essays' | 'subscribers' | 'mentorship' | 'comments' | 'cms' | 'settings'>('overview');
+
+  // Credentials Setup and Settings states
+  const [adminsList, setAdminsList] = useState<FirebaseAdmin[]>([]);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [consolePassphrase, setConsolePassphrase] = useState('');
+  const [settingsMessage, setSettingsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
 
   // Search filter states inside dashboards
   const [subSearch, setSubSearch] = useState('');
@@ -96,6 +103,88 @@ export const Admin: React.FC<AdminProps> = ({
     setCmsImageUrl('');
     setCmsFileUrl('');
     setCmsFileType('');
+  };
+
+  // Load settings and admin email lists if auth role resolves to admin
+  useEffect(() => {
+    if (currentUser?.role === 'admin') {
+      const loadSettings = async () => {
+        try {
+          const admins = await getAdmins();
+          setAdminsList(admins);
+          
+          const pass = await getAdminPassphrase();
+          setConsolePassphrase(pass);
+        } catch (e) {
+          console.error("Failed loading administrative directories:", e);
+        }
+      };
+      loadSettings();
+    }
+  }, [currentUser]);
+
+  // Handle adding a new authorized admin email to Firebase
+  const handleAddAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsMessage(null);
+    if (!newAdminEmail.trim() || !newAdminEmail.includes('@')) {
+      setSettingsMessage({ type: 'error', text: 'Please enter a valid Google email address.' });
+      return;
+    }
+
+    setSettingsLoading(true);
+    try {
+      const added = await createAdmin(newAdminEmail);
+      setAdminsList(prev => [added, ...prev.filter(a => a.email !== added.email)]);
+      setNewAdminEmail('');
+      setSettingsMessage({ type: 'success', text: `Successfully authorized admin access for ${added.email}.` });
+    } catch (err: any) {
+      console.error(err);
+      setSettingsMessage({ type: 'error', text: 'Failed to authorize email access. Verify you have network connectivity.' });
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  // Handle removing/revoking an authorized admin email
+  const handleRemoveAdmin = async (email: string) => {
+    if (!window.confirm(`Are you sure you want to revoke moderator privileges for ${email}?`)) {
+      return;
+    }
+
+    setSettingsMessage(null);
+    setSettingsLoading(true);
+    try {
+      await deleteAdmin(email);
+      setAdminsList(prev => prev.filter(a => a.email !== email));
+      setSettingsMessage({ type: 'success', text: `Revoked admin privileges for ${email}.` });
+    } catch (err: any) {
+      console.error(err);
+      setSettingsMessage({ type: 'error', text: 'Failed to revoke email access privileges.' });
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  // Handle updating the fallback passphrase
+  const handleUpdatePassphrase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsMessage(null);
+    if (!consolePassphrase.trim() || consolePassphrase.length < 4) {
+      setSettingsMessage({ type: 'error', text: 'Passphrase must be at least 4 characters long.' });
+      return;
+    }
+
+    setSettingsLoading(true);
+    try {
+      await updateAdminPassphrase(consolePassphrase);
+      setSettingsMessage({ type: 'success', text: 'Console access passphrase updated successfully.' });
+    } catch (err: any) {
+      console.error(err);
+      setSettingsMessage({ type: 'error', text: 'Failed to update access passphrase.' });
+    } finally {
+      setSettingsLoading(false);
+    }
   };
 
   const handleCmsFormSubmit = async (e: React.FormEvent) => {
@@ -204,6 +293,30 @@ export const Admin: React.FC<AdminProps> = ({
     }
   };
 
+  // Authentication Google implementation
+  const handleGoogleSignIn = async () => {
+    setLoginError('');
+    setLoginLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const credentials = await signInWithPopup(auth, provider);
+      // Success is tracked dynamically by onAuthStateChanged in App.tsx
+      if (isMockConfig) {
+        setLoginError('Google Auth is currently unconfigured inside standard offline compiling mock state.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === 'auth/popup-blocked') {
+        setLoginError('Popup blocked by browser. Please allow popup prompts for this domain to authenticate.');
+      } else {
+        setLoginError(`Google authentication mismatch: ${err.message || 'Unknown network error'}`);
+      }
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
   // Authentication submission
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,8 +342,9 @@ export const Admin: React.FC<AdminProps> = ({
           setLoginLoading(false);
         }
       } else {
-        // Admin passphrase match
-        if (passphrase.trim() === 'admin') {
+        // Fallback Admin passphrase match (dynamically checked against Firestore config)
+        const dbPassphrase = await getAdminPassphrase();
+        if (passphrase.trim() === dbPassphrase) {
           setCurrentUser({
             role: 'admin',
             email: 'admin@chancellery.org',
@@ -238,7 +352,7 @@ export const Admin: React.FC<AdminProps> = ({
           });
           setLoginLoading(false);
         } else {
-          setLoginError("Invalid passphrase. Use standard authentication passphrase 'admin' to entry the console board.");
+          setLoginError(`Invalid passphrase. Please enter the correct authorized console entry passphrase.`);
           setLoginLoading(false);
         }
       }
@@ -486,7 +600,7 @@ export const Admin: React.FC<AdminProps> = ({
                   <button
                     type="submit"
                     disabled={loginLoading}
-                    className="font-sans text-[11px] font-bold tracking-[0.2em] uppercase text-[#FAF8F5] bg-[#121212] hover:bg-[#9B7A2F] py-4 rounded-sm cursor-pointer border-none transition-all duration-200 mt-2 text-center shadow-md hover:shadow-lg flex items-center justify-center gap-2 group"
+                    className="font-sans text-[11px] font-bold tracking-[0.2em] uppercase text-[#FAF8F5] bg-[#121212] hover:bg-[#9B7A2F] py-4 rounded-sm cursor-pointer border-none transition-all duration-200 mt-2 text-center shadow-md hover:shadow-lg flex items-center justify-center gap-2 group w-full"
                   >
                     {loginLoading ? (
                       <>
@@ -497,6 +611,38 @@ export const Admin: React.FC<AdminProps> = ({
                       <>
                         <span>Verify Access Clearance</span>
                         <ArrowRight size={13} className="transition-transform duration-200 group-hover:translate-x-1" />
+                      </>
+                    )}
+                  </button>
+
+                  <div className="relative flex py-2 items-center my-1">
+                    <div className="flex-grow border-t border-[#D8D0C0]/65"></div>
+                    <span className="flex-shrink mx-4 text-[9px] text-[#A49E94] uppercase tracking-[0.2em] font-bold">
+                      or secure single sign-on
+                    </span>
+                    <div className="flex-grow border-t border-[#D8D0C0]/65"></div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    disabled={loginLoading}
+                    className="font-sans text-[11px] font-bold tracking-[0.2em] uppercase text-[#121212] bg-[#FAF8F5] hover:bg-[#121212] hover:text-[#FAF8F5] border border-[#121212] py-4 rounded-sm cursor-pointer transition-all duration-200 text-center shadow-sm hover:shadow flex items-center justify-center gap-2 w-full"
+                  >
+                    {loginLoading ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin" />
+                        <span>Authenticating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5 mr-1" viewBox="0 0 24 24">
+                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.85z" fill="#FBBC05" />
+                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.85c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                        </svg>
+                        <span>Continue with Google</span>
                       </>
                     )}
                   </button>
@@ -644,6 +790,15 @@ export const Admin: React.FC<AdminProps> = ({
                     }`}
                   >
                     Firestore CMS ({contentItems.length})
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('settings')}
+                    className={`font-sans text-[11.5px] font-bold tracking-widest uppercase pb-3 cursor-pointer transition-all bg-transparent border-0 outline-none whitespace-nowrap flex items-center gap-1.5 ${
+                      activeTab === 'settings' ? 'text-[#121212] border-b-2 border-slate-800 font-bold text-slate-800' : 'text-[#7A7A7A] hover:text-[#121212]'
+                    }`}
+                  >
+                    <Settings size={13} />
+                    Credentials Settings
                   </button>
                 </div>
 
@@ -1405,6 +1560,162 @@ export const Admin: React.FC<AdminProps> = ({
                               )}
                             </tbody>
                           </table>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === 'settings' && (
+                    <motion.div
+                      key="settings"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="space-y-10"
+                    >
+                      {/* Section Heading */}
+                      <div className="border border-[#D8D0C0] bg-white rounded-md p-6 sm:p-8 shadow-sm">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#D8D0C0]/60 pb-4 mb-6 gap-3">
+                          <div>
+                            <span className="font-sans text-[11px] font-bold tracking-[0.2em] text-[#9B7A2F] uppercase block mb-1">
+                              PORTAL CONTROLLER
+                            </span>
+                            <h3 className="font-serif text-[22px] font-bold text-[#121212] tracking-tight">
+                              Credential Settings & Access Control
+                            </h3>
+                            <p className="font-sans text-[13.5px] text-[#7A7A7A] mt-1 m-0">
+                              Configure credentials, register administrator Google profiles, and elevate access security.
+                            </p>
+                          </div>
+                        </div>
+
+                        {settingsMessage && (
+                          <div className={`mb-6 p-4 text-xs font-sans rounded-sm border flex items-start gap-2 ${
+                            settingsMessage.type === 'success' 
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                              : 'bg-red-50 border-red-200 text-red-800'
+                          }`}>
+                            <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
+                            <div>{settingsMessage.text}</div>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          {/* Left Column: Fallback Passphrase */}
+                          <div className="space-y-6">
+                            <div>
+                              <h4 className="font-serif text-[18px] font-bold text-[#121212] mb-1">
+                                Fallback Console Passphrase
+                              </h4>
+                              <p className="font-sans text-[13px] text-[#7A7A7A] leading-relaxed mb-4">
+                                Change the fallback password used to access the Admin Console with direct keyboard sign-in. Min 4 characters.
+                              </p>
+
+                              <form onSubmit={handleUpdatePassphrase} className="space-y-3">
+                                <div>
+                                  <label className="font-sans text-[10px] font-bold tracking-wider text-[#121212] uppercase block mb-1.5">
+                                    CURRENT ACTIVE PASSPHRASE
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={consolePassphrase}
+                                    onChange={(e) => setConsolePassphrase(e.target.value)}
+                                    placeholder="Enter secure passphrase"
+                                    disabled={settingsLoading}
+                                    className="w-full bg-[#FAFAFA] border border-[#D8D0C0] px-4 py-2.5 rounded-sm font-sans text-sm text-[#121212] focus:outline-none focus:border-[#bac70a]"
+                                  />
+                                </div>
+
+                                <button
+                                  type="submit"
+                                  disabled={settingsLoading}
+                                  className="px-4 py-2.5 bg-[#121212] hover:bg-[#252525] text-white font-sans text-xs font-bold tracking-widest uppercase cursor-pointer rounded-sm border-none transition-colors w-full flex items-center justify-center gap-1.5"
+                                >
+                                  {settingsLoading ? <Loader2 size={13} className="animate-spin" /> : <Key size={13} />}
+                                  Update Entry Passphrase
+                                </button>
+                              </form>
+                            </div>
+                          </div>
+
+                          {/* Right Column: Google Admin Lists */}
+                          <div className="space-y-6">
+                            <div>
+                              <h4 className="font-serif text-[18px] font-bold text-[#121212] mb-1">
+                                Authorized Google Administrators
+                              </h4>
+                              <p className="font-sans text-[13px] text-[#7A7A7A] leading-relaxed mb-4">
+                                Authorize specific email addresses. Eligible users will be automatically recognized as Admins when logging in securely with Google Auth.
+                              </p>
+
+                              <form onSubmit={handleAddAdmin} className="space-y-3 mb-6">
+                                <div>
+                                  <label className="font-sans text-[10px] font-bold tracking-wider text-[#121212] uppercase block mb-1.5">
+                                    ADD ADMINISTRATOR EMAIL ADDRESS
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="email"
+                                      value={newAdminEmail}
+                                      onChange={(e) => setNewAdminEmail(e.target.value)}
+                                      placeholder="e.g. chancellor@chancellery.org"
+                                      disabled={settingsLoading}
+                                      className="flex-1 bg-[#FAFAFA] border border-[#D8D0C0] px-3 py-2 rounded-sm font-sans text-sm text-[#121212] focus:outline-none focus:border-[#bac70a]"
+                                    />
+                                    <button
+                                      type="submit"
+                                      disabled={settingsLoading}
+                                      className="px-4 py-2 bg-[#9B7A2F] hover:bg-[#856828] text-white font-sans text-xs font-bold tracking-widest uppercase cursor-pointer rounded-sm border-none transition-colors whitespace-nowrap"
+                                    >
+                                      {settingsLoading ? <Loader2 size={13} className="animate-spin" /> : 'Authorize'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </form>
+
+                              {/* Registered emails list */}
+                              <div>
+                                <label className="font-sans text-[10px] font-bold tracking-wider text-[#7A7A7A] uppercase block mb-2">
+                                  CURRENTLY DEPLOYED DELEGATES ({adminsList.length + 2})
+                                </label>
+                                <div className="border border-[#D8D0C0] rounded-sm divide-y divide-[#D8D0C0]/50 max-h-56 overflow-y-auto scrollbar-thin">
+                                  {/* Bootstrapped system levels */}
+                                  <div className="px-3 py-2 bg-slate-50 flex justify-between items-center text-xs">
+                                    <div className="font-sans font-medium text-slate-700">
+                                      japhetprosper13@gmail.com
+                                      <span className="ml-2 px-1 text-[8px] border border-blue-200 text-blue-700 uppercase font-bold rounded-sm">system root</span>
+                                    </div>
+                                    <span className="font-sans text-[10px] text-slate-400 italic">Preconfigured</span>
+                                  </div>
+                                  <div className="px-3 py-2 bg-slate-50 flex justify-between items-center text-xs">
+                                    <div className="font-sans font-medium text-slate-700">
+                                      admin@chancellery.org
+                                      <span className="ml-2 px-1 text-[8px] border border-blue-200 text-blue-700 uppercase font-bold rounded-sm">system root</span>
+                                    </div>
+                                    <span className="font-sans text-[10px] text-slate-400 italic">Preconfigured</span>
+                                  </div>
+
+                                  {/* Dynamic list */}
+                                  {adminsList.map((adm) => (
+                                    <div key={adm.email} className="px-3 py-2 bg-white flex justify-between items-center text-xs">
+                                      <div className="font-sans text-[#121212] overflow-x-hidden truncate mr-2" title={adm.email}>
+                                        {adm.email}
+                                        <span className="ml-2 px-1 text-[8px] border border-[#D8D0C0] text-[#9B7A2F] uppercase font-bold rounded-sm">Mod</span>
+                                      </div>
+                                      <button
+                                        onClick={() => handleRemoveAdmin(adm.email)}
+                                        disabled={settingsLoading}
+                                        className="p-1 px-2 border-none bg-transparent hover:bg-red-50 text-red-500 rounded-sm hover:text-red-700 cursor-pointer font-sans text-[10px] font-bold uppercase tracking-wider animate-none flex-shrink-0"
+                                        title="Revoke admin authorization privileges"
+                                      >
+                                        Revoke
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </motion.div>

@@ -62,6 +62,116 @@
         }
       },
       "required": ["section", "title", "status", "order"]
+    },
+    "Subscriber": {
+      "title": "Subscriber",
+      "description": "Alert subscriber profiles",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "interests": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": ["code", "name", "email"]
+    },
+    "MentorshipApp": {
+      "title": "MentorshipApp",
+      "description": "Fellowship applications",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "discipline": {
+          "type": "string"
+        },
+        "proposal": {
+          "type": "string"
+        },
+        "focus": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING ADMISSION REVIEW", "APPROVED"]
+        },
+        "userId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "name", "email", "discipline", "proposal", "focus", "status"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "User comments on policy essays",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "essayId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        }
+      },
+      "required": ["essayId", "name", "text", "createdAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Authorized Admin Email Profiles",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "addedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["email"]
+    },
+    "AdminPassphrase": {
+      "title": "AdminPassphrase",
+      "description": "Fallback entry console passphrase",
+      "type": "object",
+      "properties": {
+        "passphrase": {
+          "type": "string"
+        }
+      },
+      "required": ["passphrase"]
     }
   },
   "firestore": {
@@ -72,6 +182,26 @@
     "content/{contentId}": {
       "schema": "Content",
       "description": "Aggregated content files and descriptions"
+    },
+    "subscribers/{email}": {
+      "schema": "Subscriber",
+      "description": "Registered subscriber profiles"
+    },
+    "mentorship/{appId}": {
+      "schema": "MentorshipApp",
+      "description": "Fellowship admission dossiers"
+    },
+    "comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Durable reader feedback comments"
+    },
+    "admins/{email}": {
+      "schema": "Admin",
+      "description": "Authorized administrator emails"
+    },
+    "config/{documentId}": {
+      "schema": "AdminPassphrase",
+      "description": "App configurations such as entry passphrase"
     }
   }
 }

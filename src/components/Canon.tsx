@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Download, CheckCircle, MessageSquare, Search, BookOpen, ArrowUpRight } from 'lucide-react';
-import { Essay, Comment } from '../types';
+import { Essay, Comment, User } from '../types';
 
 interface CanonProps {
   selectedEssayId: string | null;
@@ -9,6 +9,7 @@ interface CanonProps {
   parentEssaysList: Essay[];
   parentCommentsMap: Record<string, Comment[]>;
   onAddComment: (essayId: string, newComment: Comment) => void;
+  currentUser?: User | null;
 }
 
 export const Canon: React.FC<CanonProps> = ({
@@ -16,7 +17,8 @@ export const Canon: React.FC<CanonProps> = ({
   setSelectedEssayId,
   parentEssaysList,
   parentCommentsMap,
-  onAddComment
+  onAddComment,
+  currentUser
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -25,6 +27,15 @@ export const Canon: React.FC<CanonProps> = ({
   const [commentText, setCommentText] = useState('');
   const [showCommentSuccess, setShowCommentSuccess] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  // Sync comment helper with user details
+  React.useEffect(() => {
+    if (currentUser) {
+      setCommentName(currentUser.name);
+    } else {
+      setCommentName('');
+    }
+  }, [currentUser]);
 
   const essays = parentEssaysList;
   const commentsMap = parentCommentsMap;

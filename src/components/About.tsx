@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Award, Briefcase, Calendar, GraduationCap, ArrowUpRight } from 'lucide-react';
+import { Award, Briefcase, Calendar, GraduationCap, ArrowUpRight, MapPin, Milestone } from 'lucide-react';
 import { ContentItem } from '../lib/firebaseService';
 import { institutionsData } from '../data';
 
@@ -63,25 +63,110 @@ export const About: React.FC<AboutProps> = ({ items = [] }) => {
       </section>
 
       {/* Narrative Section */}
-      <section className="max-w-[960px] mx-auto px-6 sm:px-12 md:px-16 grid grid-cols-1 md:grid-cols-3 gap-12 mb-20">
-        <div className="col-span-1 border-l-2 border-[#9B7A2F] pl-6 py-2">
-          <h3 className="font-serif text-[22px] font-bold text-[#121212] tracking-tight mb-4">
-            System Builder
-          </h3>
-          <p className="font-sans text-[14.5px] text-[#7A7A7A] leading-relaxed">
-            A scholar of public administration, Osita Chidoka has dedicated his administrative career to rebuilding broken processes in high-stress road transport and aviation systems.
-          </p>
+      <section className="max-w-[1100px] mx-auto px-6 sm:px-12 md:px-16 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 mb-24 border-t border-[#D8D0C0]/50 pt-16">
+        {/* Left Column: Narrative */}
+        <div className="lg:col-span-7 flex flex-col gap-10">
+          <div className="border-l-2 border-[#9B7A2F] pl-6 py-2 text-justify">
+            <h3 className="font-serif text-[22px] font-bold text-[#121212] tracking-tight mb-4">
+              System Builder
+            </h3>
+            <p className="font-sans text-[14.5px] text-[#7A7A7A] leading-relaxed">
+              A scholar of public administration, Osita Chidoka has dedicated his administrative career to rebuilding broken processes in high-stress road transport and aviation systems.
+            </p>
+          </div>
+          <div>
+            <h3 className="font-serif text-[22px] font-bold text-[#121212] tracking-tight mb-4">
+              An Administrative Philosophy
+            </h3>
+            <p className="font-sans text-[15.5px] text-[#444444] leading-relaxed mb-4 text-justify">
+              Born in Obosi, Anambra State, Osita Chidoka has combined rigorous academic training with practical, high-stakes executive authority. Having served as the Corps Marshal of the FRSC and the Minister of Aviation, his reforms have repeatedly demonstrated that developing states do not suffer from a lack of written blueprints, but from the lack of system discipline to enforce them.
+            </p>
+            <p className="font-sans text-[15.5px] text-[#444444] leading-relaxed text-justify">
+              Under his leadership, the Federal Road Safety Corps became Nigeria's finest computer data-authoritative agency, winning standard international certification. Today, through the Athena Centre for Policy and Leadership, he focuses on training Nigeria's next generation of public administration fellowship scholars to build mechanisms that outlast their architects.
+            </p>
+          </div>
         </div>
-        <div className="col-span-2">
-          <h3 className="font-serif text-[22px] font-bold text-[#121212] tracking-tight mb-4">
-            An Administrative Philosophy
-          </h3>
-          <p className="font-sans text-[15.5px] text-[#444444] leading-relaxed mb-4 text-justify">
-            Born in Obosi, Anambra State, Osita Chidoka has combined rigorous academic training with practical, high-stakes executive authority. Having served as the Corps Marshal of the FRSC and the Minister of Aviation, his reforms have repeatedly demonstrated that developing states do not suffer from a lack of written blueprints, but from the lack of system discipline to enforce them.
-          </p>
-          <p className="font-sans text-[15.5px] text-[#444444] leading-relaxed text-justify">
-            Under his leadership, the Federal Road Safety Corps became Nigeria's finest computer data-authoritative agency, winning standard international certification. Today, through the Athena Centre for Policy and Leadership, he focuses on training Nigeria's next generation of public administration fellowship scholars to build mechanisms that outlast their architects.
-          </p>
+
+        {/* Right Column: Profile Directory & Education */}
+        <div className="lg:col-span-5 flex flex-col gap-8">
+          {/* Profile Card */}
+          <div className="border border-[#D8D0C0] bg-white rounded-sm overflow-hidden shadow-md relative p-8">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#9B7A2F]" />
+            <span className="font-sans text-[11px] font-bold tracking-[0.2em] text-[#9B7A2F] uppercase block mb-6">
+              Profile Directory
+            </span>
+            <div className="flex flex-col gap-5">
+              <div className="flex items-start gap-3.5 text-[#444444] text-left">
+                <MapPin size={17} className="text-[#9B7A2F] flex-shrink-0 mt-0.5" />
+                <span className="font-sans text-[14px]">Obosi, Anambra State, Nigeria</span>
+              </div>
+              <div className="flex items-start gap-4 text-[#444444] text-left">
+                <Milestone size={17} className="text-[#9B7A2F] flex-shrink-0 mt-0.5" />
+                <span className="font-sans text-[14px]">Born: July 18, 1971</span>
+              </div>
+              <div className="flex items-start gap-3.5 text-[#444444] text-left">
+                <Award size={18} className="text-[#9B7A2F] flex-shrink-0 mt-0.5" />
+                <span className="font-sans text-[14px] leading-relaxed font-normal">Officer of the Order of the Federal Republic</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Education & Credentials */}
+          <div className="mt-4">
+            <span className="font-sans text-[11px] font-bold tracking-[0.2em] text-[#121212] uppercase block mb-6">
+              Education & Credentials
+            </span>
+            <div className="flex flex-col">
+              {/* Oxford */}
+              <div className="border-t border-[#D8D0C0]/80 py-5 flex gap-4 items-start text-left">
+                <GraduationCap size={22} className="text-[#9B7A2F] flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-serif text-[17px] font-bold text-[#121212] leading-tight mb-1">
+                    University of Oxford, UK
+                  </h4>
+                  <p className="font-sans text-[13.5px] text-[#7A7A7A]">
+                    Post-Graduate Diploma in Global Business
+                  </p>
+                </div>
+              </div>
+              {/* George Mason */}
+              <div className="border-t border-[#D8D0C0]/80 py-5 flex gap-4 items-start text-left">
+                <GraduationCap size={22} className="text-[#9B7A2F] flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-serif text-[17px] font-bold text-[#121212] leading-tight mb-1">
+                    George Mason University, USA
+                  </h4>
+                  <p className="font-sans text-[13.5px] text-[#7A7A7A]">
+                    Master of Public Policy (MPP)
+                  </p>
+                </div>
+              </div>
+              {/* UNN */}
+              <div className="border-t border-[#D8D0C0]/80 py-5 flex gap-4 items-start text-left">
+                <GraduationCap size={22} className="text-[#9B7A2F] flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-serif text-[17px] font-bold text-[#121212] leading-tight mb-1">
+                    University of Nigeria, Nsukka
+                  </h4>
+                  <p className="font-sans text-[13.5px] text-[#7A7A7A]">
+                    Bachelor of Science (B.Sc.) in Management
+                  </p>
+                </div>
+              </div>
+              {/* National Honour */}
+              <div className="border-t border-[#D8D0C0]/80 py-5 flex gap-4 items-start text-left">
+                <GraduationCap size={22} className="text-[#9B7A2F] flex-shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-serif text-[17px] font-bold text-[#121212] leading-tight mb-1">
+                    National Honour
+                  </h4>
+                  <p className="font-sans text-[13.5px] text-[#7A7A7A]">
+                    Officer of the Order of the Federal Republic (OFR)
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, ChevronRight, GraduationCap, CheckCircle, Award, Users } from 'lucide-react';
-import { MentorshipApp } from '../types';
+import { MentorshipApp, User } from '../types';
 import { mentorshipVectors } from '../data';
 
 interface MentorshipProps {
   parentApps: MentorshipApp[];
   onApplyApp: (application: MentorshipApp) => void;
+  currentUser?: User | null;
 }
 
-export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp }) => {
+export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp, currentUser }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [discipline, setDiscipline] = useState('');
@@ -17,6 +18,17 @@ export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp }
   const [focusVector, setFocusVector] = useState(mentorshipVectors[0].title);
   const [submitting, setSubmitting] = useState(false);
   const [receipt, setReceipt] = useState<MentorshipApp | null>(null);
+
+  // Sync form details with authenticated user profile
+  React.useEffect(() => {
+    if (currentUser) {
+      setFullName(currentUser.name);
+      setEmail(currentUser.email);
+    } else {
+      setFullName('');
+      setEmail('');
+    }
+  }, [currentUser]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +80,7 @@ export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp }
           Mekaria Mentorship
         </h1>
         <div className="border-l-2 border-[#9B7A2F] pl-6 md:pl-8 py-2 max-w-[580px] mt-8 mb-12">
-          <p className="font-serif text-[20px] sm:text-[24px] italic text-[#444444] leading-[1.5] text-justify">
+          <p className="font-serif text-[20px] sm:text-[24px] italic text-[#444444] leading-[1.5] text-left">
             "Mekaria is drawing-board courage. It is the moral demand to 'do more,' to engineer excellence in our immediate offices, and to accept responsibilities that exceed our credentials."
           </p>
         </div>
@@ -80,7 +92,7 @@ export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp }
           <span className="font-sans text-[11px] font-bold tracking-[0.2em] text-[#9B7A2F] uppercase block mb-2">
             The Philosophy
           </span>
-          <p className="font-sans text-[13.5px] text-[#7A7A7A] leading-relaxed mt-4 text-justify">
+          <p className="font-sans text-[13.5px] text-[#7A7A7A] leading-relaxed mt-4 text-left">
             Under this program, Osita Chidoka brings together groups of young public analysts during intensive retreats to study operational governance systems.
           </p>
         </div>
@@ -103,7 +115,7 @@ export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp }
                   <h4 className="font-serif text-[18px] font-bold text-[#121212] tracking-tight mb-2">
                     {vec.title}
                   </h4>
-                  <p className="font-sans text-[14px] text-[#444444] leading-relaxed text-justify">
+                  <p className="font-sans text-[14px] text-[#444444] leading-relaxed text-left">
                     {vec.description}
                   </p>
                 </div>
@@ -114,9 +126,22 @@ export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp }
       </section>
 
       {/* Form Submission dossier section */}
-      <section className="max-w-[720px] mx-auto px-6 sm:px-12 md:px-0 py-12 border-t border-[#D8D0C0]">
-        <div className="border border-[#D8D0C0] bg-white rounded-sm overflow-hidden shadow-md relative">
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#121212]" />
+      <section className="max-w-[1020px] mx-auto px-6 sm:px-12 md:px-16 py-16 border-t border-[#D8D0C0] grid grid-cols-1 md:grid-cols-12 gap-10 items-start">
+        <div className="md:col-span-4 lg:col-span-4 pt-4">
+          <span className="font-sans text-[11px] font-bold tracking-[0.22em] text-[#9B7A2F] uppercase block mb-3">
+            FELLOWSHIP INTAKE
+          </span>
+          <h2 className="font-serif text-[36px] sm:text-[42px] font-bold tracking-tight leading-[1.1] text-[#121212] mb-6">
+            The Autumn Class
+          </h2>
+          <p className="font-sans text-[14px] text-[#555555] leading-relaxed text-left pb-4">
+            The Mekaria Fellowship is open twice a year. We admit exactly fifteen delegates per cohort to guarantee a highly personalized development curriculum.
+          </p>
+        </div>
+
+        <div className="md:col-span-8 lg:col-span-8 w-full">
+          <div className="border border-[#D8D0C0] bg-white rounded-sm overflow-hidden shadow-md relative">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#9B7A2F]" />
 
           <AnimatePresence mode="wait">
             {receipt ? (
@@ -154,7 +179,7 @@ export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp }
                     <span className="font-mono text-[11px] font-bold text-[#9B7A2F] tracking-widest">{receipt.id}</span>
                   </div>
 
-                  <div className="flex flex-col gap-4 text-justify">
+                  <div className="flex flex-col gap-4 text-left">
                     <div>
                       <span className="text-[9px] text-[#7A7A7A] font-bold uppercase block">APPLICANT</span>
                       <span className="font-sans text-[15px] font-bold text-[#121212]">{receipt.name}</span>
@@ -194,15 +219,12 @@ export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp }
                 exit={{ opacity: 0 }}
                 className="p-8 sm:p-12 text-left"
               >
-                <div className="mb-8 text-center sm:text-left">
-                  <span className="font-sans text-[11px] font-bold tracking-[0.2em] text-[#9B7A2F] uppercase block mb-2">
-                    FELLOWSHIP REGISTER
-                  </span>
-                  <h2 className="font-serif text-[28px] sm:text-[34px] font-black text-[#121212] tracking-tight">
-                    Submit Fellowship Nominee Blueprint
+                <div className="mb-8">
+                  <h2 className="font-serif text-[28px] sm:text-[32px] font-bold text-[#121212] tracking-tight leading-snug">
+                    Apply for the Mekaria Fellowship
                   </h2>
-                  <p className="font-sans text-[14px] text-[#7A7A7A] mt-2">
-                    Submit your credentials and governance proposal below. High-potential applicants will be selected for intensive executive leadership retreats.
+                  <p className="font-sans text-[14px] text-[#444444] mt-3 leading-relaxed text-left">
+                    Submit your personal background information and a short public reform statement. All applicants must hold active links to civil groups or state departments.
                   </p>
                 </div>
 
@@ -293,7 +315,8 @@ export const Mentorship: React.FC<MentorshipProps> = ({ parentApps, onApplyApp }
             )}
           </AnimatePresence>
         </div>
-      </section>
+      </div>
+    </section>
     </motion.div>
   );
 };

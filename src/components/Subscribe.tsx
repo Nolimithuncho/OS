@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bell, Check, Mail, Loader2, ArrowUpRight } from 'lucide-react';
-import { Subscriber } from '../types';
+import { Subscriber, User } from '../types';
 
 interface SubscribeProps {
   onAddSubscriber: (subscriber: Subscriber) => void;
+  currentUser?: User | null;
 }
 
-export const Subscribe: React.FC<SubscribeProps> = ({ onAddSubscriber }) => {
+export const Subscribe: React.FC<SubscribeProps> = ({ onAddSubscriber, currentUser }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [selectedInterests, setSelectedInterests] = useState<string[]>([
@@ -16,6 +17,17 @@ export const Subscribe: React.FC<SubscribeProps> = ({ onAddSubscriber }) => {
   ]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<Subscriber | null>(null);
+
+  // Sync inputs with active profile
+  React.useEffect(() => {
+    if (currentUser) {
+      setName(currentUser.name);
+      setEmail(currentUser.email);
+    } else {
+      setName('');
+      setEmail('');
+    }
+  }, [currentUser]);
 
   const interestOptions = [
     { title: "Essays & Memoirs" },
