@@ -111,7 +111,7 @@
         },
         "status": {
           "type": "string",
-          "enum": ["PENDING ADMISSION REVIEW", "APPROVED"]
+          "enum": ["PENDING ADMISSION REVIEW", "APPROVED", "DECLINED"]
         },
         "userId": {
           "type": "string"
@@ -121,6 +121,39 @@
         }
       },
       "required": ["id", "name", "email", "discipline", "proposal", "focus", "status"]
+    },
+    "DecisionResponse": {
+      "title": "DecisionResponse",
+      "description": "Admin decision records on fellowship applications",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "appId": {
+          "type": "string"
+        },
+        "applicantName": {
+          "type": "string"
+        },
+        "applicantEmail": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["APPROVED", "DECLINED"]
+        },
+        "feedback": {
+          "type": "string"
+        },
+        "respondedAt": {
+          "type": "string"
+        },
+        "respondedBy": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "appId", "applicantName", "applicantEmail", "status", "feedback", "respondedAt", "respondedBy"]
     },
     "Comment": {
       "title": "Comment",
@@ -210,6 +243,10 @@
     "mentorship/{appId}": {
       "schema": "MentorshipApp",
       "description": "Fellowship admission dossiers"
+    },
+    "responses/{responseId}": {
+      "schema": "DecisionResponse",
+      "description": "Logged admin response feedback and outcomes"
     },
     "comments/{commentId}": {
       "schema": "Comment",

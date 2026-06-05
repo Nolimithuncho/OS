@@ -104,9 +104,21 @@ service cloud.firestore {
         && data.discipline is string && data.discipline.size() <= 1024
         && data.proposal is string && data.proposal.size() <= 16384
         && data.focus is string && data.focus.size() <= 512
-        && data.status is string && (data.status == 'PENDING ADMISSION REVIEW' || data.status == 'APPROVED')
+        && data.status is string && (data.status == 'PENDING ADMISSION REVIEW' || data.status == 'APPROVED' || data.status == 'DECLINED')
         && (!('userId' in data) || (data.userId is string && data.userId.size() <= 128))
         && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 128));
+    }
+
+    function isValidDecisionResponse(data) {
+      return data.keys().hasAll(['id', 'appId', 'applicantName', 'applicantEmail', 'status', 'feedback', 'respondedAt', 'respondedBy'])
+        && data.id is string && data.id.size() <= 128
+        && data.appId is string && data.appId.size() <= 128
+        && data.applicantName is string && data.applicantName.size() <= 256
+        && data.applicantEmail is string && data.applicantEmail.size() <= 256
+        && data.status is string && (data.status == 'APPROVED' || data.status == 'DECLINED')
+        && data.feedback is string && data.feedback.size() <= 16384
+        && data.respondedAt is string && data.respondedAt.size() <= 128
+        && data.respondedBy is string && data.respondedBy.size() <= 256;
     }
 
     function isValidComment(data) {
@@ -170,6 +182,15 @@ service cloud.firestore {
           || (request.auth != null && isVerified() && existing().userId == request.auth.uid && incoming().userId == request.auth.uid && incoming().status == 'PENDING ADMISSION REVIEW' && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'discipline', 'proposal', 'focus']))
         );
         
+      allow delete: if request.auth != null && isAdmin();
+    }
+
+    // Fellowship Responses - Managed by Admin, read by Admin & Owner of the application
+    match /responses/{responseId} {
+      allow read: if (request.auth != null && isAdmin()) 
+        || (request.auth != null && isVerified() && request.auth.token.email.toLowerCase() == existing().applicantEmail.toLowerCase());
+      allow create: if request.auth != null && isAdmin() && isValidId(responseId) && isValidDecisionResponse(incoming());
+      allow update: if false; // Decisions are immutable or deleted & recreated
       allow delete: if request.auth != null && isAdmin();
     }
 

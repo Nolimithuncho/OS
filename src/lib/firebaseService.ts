@@ -499,7 +499,7 @@ export interface FirebaseMentorshipApp {
   discipline: string;
   proposal: string;
   focus: string;
-  status: 'PENDING ADMISSION REVIEW' | 'APPROVED';
+  status: 'PENDING ADMISSION REVIEW' | 'APPROVED' | 'DECLINED';
   userId?: string;
   createdAt?: string;
 }
@@ -603,10 +603,10 @@ export async function createMentorshipApp(app: FirebaseMentorshipApp): Promise<F
   }
 }
 
-export async function updateMentorshipAppStatus(appId: string, status: 'PENDING ADMISSION REVIEW' | 'APPROVED'): Promise<void> {
+export async function updateMentorshipAppStatus(appId: string, status: 'PENDING ADMISSION REVIEW' | 'APPROVED' | 'DECLINED'): Promise<void> {
   if (isMockConfig || appId.startsWith('mock-') || appId.startsWith('local-')) {
     const apps = await getMentorshipApps();
-    const updated = apps.map(app => app.id === appId ? { ...app, status } : app);
+    const updated = apps.map(app => app.id === appId ? { ...app, status } : app as any);
     localStorage.setItem(LOCAL_MENTORSHIP_KEY, JSON.stringify(updated));
     return;
   }
@@ -956,6 +956,107 @@ export async function getAdminUserByEmail(email: string): Promise<FirebaseAdminU
     console.error(`Firestore getAdminUserByEmail (${cleanEmail}) failed:`, err);
     const users = await getAdminUsers();
     return users.find(u => u.email === cleanEmail) || null;
+  }
+}
+
+// -----------------------------------------------------
+// REAL FELLOWSHIP DECISION RESPONSES FIRESTORE SERVICES
+// -----------------------------------------------------
+const LOCAL_RESPONSES_KEY = 'osc_dec_responses';
+
+export interface FirebaseDecisionResponse {
+  id: string;
+  appId: string;
+  applicantName: string;
+  applicantEmail: string;
+  status: 'APPROVED' | 'DECLINED';
+  feedback: string;
+  respondedAt: string;
+  respondedBy: string;
+}
+
+export async function getDecisionResponses(): Promise<FirebaseDecisionResponse[]> {
+  if (isMockConfig) {
+    const cached = localStorage.getItem(LOCAL_RESPONSES_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+
+  try {
+    const colRef = collection(db, 'responses');
+    const snapshot = await getDocs(colRef);
+    const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as FirebaseDecisionResponse));
+    localStorage.setItem(LOCAL_RESPONSES_KEY, JSON.stringify(items));
+    return items;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.LIST, 'responses');
+    }
+    console.error('Firestore getDecisionResponses failed, fall back to cache:', err);
+    const cached = localStorage.getItem(LOCAL_RESPONSES_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+}
+
+export async function createDecisionResponse(resp: FirebaseDecisionResponse): Promise<FirebaseDecisionResponse> {
+  const finalResp: FirebaseDecisionResponse = {
+    ...resp,
+    respondedAt: resp.respondedAt || new Date().toISOString()
+  };
+
+  if (isMockConfig) {
+    const cached = localStorage.getItem(LOCAL_RESPONSES_KEY);
+    const existing = cached ? JSON.parse(cached) : [];
+    const updated = [finalResp, ...existing.filter((r: any) => r.id !== resp.id)];
+    localStorage.setItem(LOCAL_RESPONSES_KEY, JSON.stringify(updated));
+    return finalResp;
+  }
+
+  try {
+    const docRef = doc(db, 'responses', resp.id);
+    await setDoc(docRef, finalResp);
+    const cached = localStorage.getItem(LOCAL_RESPONSES_KEY);
+    const existing = cached ? JSON.parse(cached) : [];
+    const updated = [finalResp, ...existing.filter((r: any) => r.id !== resp.id)];
+    localStorage.setItem(LOCAL_RESPONSES_KEY, JSON.stringify(updated));
+    return finalResp;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.WRITE, `responses/${resp.id}`);
+    }
+    console.error('Firestore createDecisionResponse failure, caching local:', err);
+    const cached = localStorage.getItem(LOCAL_RESPONSES_KEY);
+    const existing = cached ? JSON.parse(cached) : [];
+    const updated = [finalResp, ...existing.filter((r: any) => r.id !== resp.id)];
+    localStorage.setItem(LOCAL_RESPONSES_KEY, JSON.stringify(updated));
+    return finalResp;
+  }
+}
+
+export async function deleteDecisionResponse(id: string): Promise<void> {
+  if (isMockConfig || id.startsWith('mock-') || id.startsWith('local-')) {
+    const cached = localStorage.getItem(LOCAL_RESPONSES_KEY);
+    if (cached) {
+      const items: FirebaseDecisionResponse[] = JSON.parse(cached);
+      const filtered = items.filter(r => r.id !== id);
+      localStorage.setItem(LOCAL_RESPONSES_KEY, JSON.stringify(filtered));
+    }
+    return;
+  }
+
+  try {
+    const docRef = doc(db, 'responses', id);
+    await deleteDoc(docRef);
+    const cached = localStorage.getItem(LOCAL_RESPONSES_KEY);
+    if (cached) {
+      const items: FirebaseDecisionResponse[] = JSON.parse(cached);
+      const filtered = items.filter(r => r.id !== id);
+      localStorage.setItem(LOCAL_RESPONSES_KEY, JSON.stringify(filtered));
+    }
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.DELETE, `responses/${id}`);
+    }
+    console.error('Firestore deleteDecisionResponse failure:', err);
   }
 }
 

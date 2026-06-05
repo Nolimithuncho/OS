@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LogOut, BookOpen, Users, MessageSquare, PlusCircle, CheckCircle, Trash2, Key, AlertCircle, FileText, Search, ShieldAlert, BadgeInfo, FolderEdit, Settings, Edit3, Image, FileUp, Globe, Eye, EyeOff, Loader2, Mail, ArrowRight } from 'lucide-react';
-import { Essay, Subscriber, MentorshipApp, Comment, User } from '../types';
+import { Essay, Subscriber, MentorshipApp, Comment, User, DecisionResponse } from '../types';
 import { ContentItem, uploadFile, createContentItem, updateContentItem, deleteContentItem, isMockConfig, FirebaseAdmin, getAdmins, createAdmin, deleteAdmin, getAdminPassphrase, updateAdminPassphrase, getAdminUserByEmail } from '../lib/firebaseService';
 import { signOut, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
@@ -9,10 +9,12 @@ import { auth } from '../firebase';
 interface AdminProps {
   essaysList: Essay[];
   onAddEssay: (essay: Essay) => void;
+  onDeleteEssay?: (essayId: string) => void;
   subscribersList: Subscriber[];
   onAddSubscriber: (subscriber: Subscriber) => void;
+  onDeleteSubscriber?: (email: string) => Promise<void>;
   mentorshipApps: MentorshipApp[];
-  onUpdateAppStatus: (appId: string, status: 'PENDING ADMISSION REVIEW' | 'APPROVED') => void;
+  onUpdateAppStatus: (appId: string, status: 'PENDING ADMISSION REVIEW' | 'APPROVED' | 'DECLINED', feedback?: string) => void;
   onDeleteApp: (appId: string) => void;
   commentsMap: Record<string, Comment[]>;
   onDeleteComment: (essayId: string, idx: number) => void;
@@ -20,13 +22,17 @@ interface AdminProps {
   setCurrentUser: (user: User | null) => void;
   contentItems: ContentItem[];
   refreshContent: () => Promise<void>;
+  decisionResponses?: DecisionResponse[];
+  onDeleteDecisionResponse?: (id: string) => Promise<void>;
 }
 
 export const Admin: React.FC<AdminProps> = ({
   essaysList,
   onAddEssay,
+  onDeleteEssay,
   subscribersList,
   onAddSubscriber,
+  onDeleteSubscriber,
   mentorshipApps,
   onUpdateAppStatus,
   onDeleteApp,
@@ -35,7 +41,9 @@ export const Admin: React.FC<AdminProps> = ({
   currentUser,
   setCurrentUser,
   contentItems,
-  refreshContent
+  refreshContent,
+  decisionResponses = [],
+  onDeleteDecisionResponse
 }) => {
   // Login flow states
   const [adminEmail, setAdminEmail] = useState('');
@@ -44,8 +52,8 @@ export const Admin: React.FC<AdminProps> = ({
   const [loginLoading, setLoginLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Dashboard navigation tab: 'overview' | 'essays' | 'subscribers' | 'mentorship' | 'comments' | 'cms' | 'settings'
-  const [activeTab, setActiveTab] = useState<'overview' | 'essays' | 'subscribers' | 'mentorship' | 'comments' | 'cms' | 'settings'>('overview');
+  // Dashboard navigation tab: 'overview' | 'essays' | 'subscribers' | 'mentorship' | 'responses' | 'comments' | 'cms' | 'settings'
+  const [activeTab, setActiveTab] = useState<'overview' | 'essays' | 'subscribers' | 'mentorship' | 'responses' | 'comments' | 'cms' | 'settings'>('overview');
 
   // Credentials Setup and Settings states
   const [adminsList, setAdminsList] = useState<FirebaseAdmin[]>([]);
@@ -86,6 +94,9 @@ export const Admin: React.FC<AdminProps> = ({
 
   // Editing state
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [decidingAppId, setDecidingAppId] = useState<string | null>(null);
+  const [decisionType, setDecisionType] = useState<'APPROVED' | 'DECLINED' | null>(null);
+  const [decisionFeedback, setDecisionFeedback] = useState('');
   const [cmsLoading, setCmsLoading] = useState(false);
   const [cmsMessage, setCmsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [cmsFilterSection, setCmsFilterSection] = useState<'all' | 'about' | 'canon' | 'documents' | 'gallery'>('all');
@@ -746,6 +757,14 @@ export const Admin: React.FC<AdminProps> = ({
                     Mentorship Fellowship ({mentorshipApps.length})
                   </button>
                   <button
+                    onClick={() => setActiveTab('responses')}
+                    className={`font-sans text-[11.5px] font-bold tracking-widest uppercase pb-3 cursor-pointer transition-all bg-transparent border-0 outline-none whitespace-nowrap ${
+                      activeTab === 'responses' ? 'text-[#121212] border-b-2 border-[#121212] font-semibold' : 'text-[#7A7A7A] hover:text-[#121212]'
+                    }`}
+                  >
+                    Decisions Log ({decisionResponses.length})
+                  </button>
+                  <button
                     onClick={() => setActiveTab('comments')}
                     className={`font-sans text-[11.5px] font-bold tracking-widest uppercase pb-3 cursor-pointer transition-all bg-transparent border-0 outline-none whitespace-nowrap ${
                       activeTab === 'comments' ? 'text-[#121212] border-b-2 border-[#121212] font-semibold' : 'text-[#7A7A7A] hover:text-[#121212]'
@@ -945,6 +964,57 @@ export const Admin: React.FC<AdminProps> = ({
                           Compile & Publish Essay <PlusCircle size={15} />
                         </button>
                       </form>
+
+                      {/* Active Archive Directory and Record List */}
+                      <div className="mt-12 border-t border-[#D8D0C0] pt-8 text-left">
+                        <h4 className="font-serif text-[17px] font-bold text-[#121212] tracking-normal mb-1 uppercase">
+                          Dossier of Compiled Literary Memoirs & Policy Essays
+                        </h4>
+                        <p className="font-sans text-[12px] text-[#7A7A7A] mb-5">
+                          Below is the registry of all current essays available for public view. You can purge an entry instantly.
+                        </p>
+                        
+                        <div className="flex flex-col gap-3">
+                          {essaysList.map((essay) => (
+                            <div 
+                              key={essay.id} 
+                              className="border border-[#D8D0C0]/60 bg-[#F7F3EC]/20 rounded-sm p-4 flex justify-between items-center gap-4 hover:bg-[#F7F3EC]/40 transition-colors"
+                            >
+                              <div className="text-left">
+                                <span className="font-mono text-[9px] text-[#9B7A2F] uppercase block mb-0.5 tracking-wider font-bold">
+                                  {essay.category} — {essay.year}
+                                </span>
+                                <h5 className="font-serif text-[14.5px] font-bold text-[#121212] m-0">
+                                  {essay.title}
+                                </h5>
+                                <span className="font-mono text-[9.5px] text-zinc-400">
+                                  ID REF: {essay.id}
+                                </span>
+                              </div>
+                              
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Are you absolutely sure you want to delete and purge the essay: "${essay.title}"?`)) {
+                                    if (onDeleteEssay) {
+                                      onDeleteEssay(essay.id);
+                                    }
+                                  }
+                                }}
+                                className="text-zinc-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-sm bg-transparent border-none outline-none cursor-pointer transition-colors"
+                                title="Delete Memoir"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          ))}
+                          
+                          {essaysList.length === 0 && (
+                            <p className="font-serif text-xs italic text-zinc-500">
+                              No memoir titles recorded in the active workspace.
+                            </p>
+                          )}
+                        </div>
+                      </div>
                     </motion.div>
                   )}
 
@@ -997,13 +1067,14 @@ export const Admin: React.FC<AdminProps> = ({
                                   <td className="p-4 font-mono text-zinc-500 text-xs">{sub.email}</td>
                                   <td className="p-4 text-right">
                                     <button
-                                      onClick={() => {
+                                      onClick={async () => {
                                         if (confirm(`Remove subscriber ${sub.name} from alert registers?`)) {
-                                          // Delete trigger handled inside App local state
+                                          if (onDeleteSubscriber) {
+                                            await onDeleteSubscriber(sub.email);
+                                          }
                                         }
                                       }}
-                                      disabled={subscribersList.length <= 1} // Safety mock check
-                                      className="text-[#7A7A7A] hover:text-red-700 p-1 bg-transparent border-none outline-none cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                      className="text-[#7A7A7A] hover:text-red-700 p-1 bg-transparent border-none outline-none cursor-pointer transition-colors"
                                       title="Remove from system"
                                     >
                                       <Trash2 size={14} />
@@ -1060,7 +1131,8 @@ export const Admin: React.FC<AdminProps> = ({
                                 <h4 className="font-serif text-[17px] font-bold text-[#121212] leading-tight mb-1">{app.name}</h4>
                                 <span className="font-mono text-[10px] text-zinc-400 block mb-3 overflow-hidden text-ellipsis whitespace-nowrap" title={app.email}>{app.email}</span>
                                 <span className={`font-mono text-[9px] px-2 py-0.5 rounded-sm font-semibold inline-block ${
-                                  app.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
+                                  app.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-800' : 
+                                  app.status === 'DECLINED' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'
                                 }`}>
                                   {app.status}
                                 </span>
@@ -1078,25 +1150,88 @@ export const Admin: React.FC<AdminProps> = ({
                                 </p>
                               </div>
 
-                              <div className="md:col-span-1 flex flex-row md:flex-col gap-3 justify-end h-full items-end">
-                                {app.status === 'PENDING ADMISSION REVIEW' && (
-                                  <button
-                                    onClick={() => onUpdateAppStatus(app.id, 'APPROVED')}
-                                    className="font-sans text-[10px] font-bold tracking-widest uppercase text-white bg-emerald-700 hover:bg-emerald-800 px-3.5 py-2.5 rounded-sm cursor-pointer border-none flex items-center gap-1 leading-none shadow-sm transition-colors"
+                              <div className="md:col-span-1 flex flex-col gap-3 justify-end h-full items-end">
+                                {app.status === 'PENDING ADMISSION REVIEW' && decidingAppId !== app.id && (
+                                  <div className="flex flex-row md:flex-col gap-2 w-full lg:max-w-[180px]">
+                                    <button
+                                      onClick={() => {
+                                        setDecidingAppId(app.id);
+                                        setDecisionType('APPROVED');
+                                        setDecisionFeedback('We are delighted to inform you that your blueprint proposal has been approved for the Mekaria Fellowship program.');
+                                      }}
+                                      className="w-full font-sans text-[10px] font-bold tracking-widest uppercase text-white bg-emerald-700 hover:bg-emerald-800 p-2.5 rounded-sm cursor-pointer border-none flex items-center justify-center gap-1 leading-none shadow-sm transition-colors text-center"
+                                    >
+                                      Approve <CheckCircle size={10} />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setDecidingAppId(app.id);
+                                        setDecisionType('DECLINED');
+                                        setDecisionFeedback('Thank you for submitting your proposal. After careful evaluation, we are unable to admit your application to the current cohort.');
+                                      }}
+                                      className="w-full font-sans text-[10px] font-bold tracking-widest uppercase text-white bg-red-800 hover:bg-red-900 p-2.5 rounded-sm cursor-pointer border-none flex items-center justify-center gap-1 leading-none shadow-sm transition-colors text-center"
+                                    >
+                                      Decline <ShieldAlert size={10} />
+                                    </button>
+                                  </div>
+                                )}
+
+                                {decidingAppId === app.id && (
+                                  <motion.div 
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="w-full text-left bg-neutral-50 p-3 border border-[#D8D0C0] rounded-sm flex flex-col gap-2 lg:max-w-[200px]"
                                   >
-                                    Approve Fellow <CheckCircle size={11} />
+                                    <span className="font-sans text-[9px] font-bold tracking-wider uppercase text-[#9B7A2F]">
+                                      Feedback for {decisionType}
+                                    </span>
+                                    <textarea
+                                      rows={3}
+                                      value={decisionFeedback}
+                                      onChange={(e) => setDecisionFeedback(e.target.value)}
+                                      placeholder="Write administrative review statement..."
+                                      className="w-full p-2 text-[11px] font-sans border border-[#D8D0C0] rounded-sm bg-white outline-none resize-none leading-normal text-[#121212]"
+                                    />
+                                    <div className="flex gap-1 justify-end">
+                                      <button
+                                        onClick={() => {
+                                          setDecidingAppId(null);
+                                          setDecisionType(null);
+                                          setDecisionFeedback('');
+                                        }}
+                                        className="font-sans text-[8px] font-bold tracking-widest uppercase bg-transparent text-zinc-500 hover:text-zinc-800 px-1.5 py-1 rounded-sm border border-zinc-300 cursor-pointer transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          if (decisionType) {
+                                            onUpdateAppStatus(app.id, decisionType, decisionFeedback);
+                                            setDecidingAppId(null);
+                                            setDecisionType(null);
+                                            setDecisionFeedback('');
+                                          }
+                                        }}
+                                        className="font-sans text-[8px] font-bold tracking-widest uppercase text-white bg-[#121212] hover:bg-[#9B7A2F] px-1.5 py-1 rounded-sm border-none cursor-pointer transition-colors"
+                                      >
+                                        Submit
+                                      </button>
+                                    </div>
+                                  </motion.div>
+                                )}
+
+                                {decidingAppId !== app.id && (
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`Completely purge mentorship fellow dossier ${app.id}?`)) {
+                                        onDeleteApp(app.id);
+                                      }
+                                    }}
+                                    className="w-full lg:max-w-[180px] font-sans text-[10px] font-bold tracking-widest uppercase border border-red-200 text-red-700 hover:text-white hover:bg-red-700 p-2.5 rounded-sm cursor-pointer transition-colors flex items-center justify-center gap-1 leading-none"
+                                  >
+                                    Purge Dossier <Trash2 size={10} />
                                   </button>
                                 )}
-                                <button
-                                  onClick={() => {
-                                    if (confirm(`Completely purge mentorship fellow dossier ${app.id}?`)) {
-                                      onDeleteApp(app.id);
-                                    }
-                                  }}
-                                  className="font-sans text-[10px] font-bold tracking-widest uppercase border border-red-200 text-red-700 hover:text-white hover:bg-red-700 px-3.5 py-2.5 rounded-sm cursor-pointer transition-colors flex items-center gap-1.5 leading-none"
-                                >
-                                  Purge Dossier <Trash2 size={11} />
-                                </button>
                               </div>
                             </div>
                           </div>
@@ -1109,6 +1244,86 @@ export const Admin: React.FC<AdminProps> = ({
                             </p>
                           </div>
                         )}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {activeTab === 'responses' && (
+                    <motion.div
+                      key="responses"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      <div className="border border-[#D8D0C0] bg-white rounded-md p-6 shadow-sm">
+                        <div className="border-b border-[#D8D0C0]/50 pb-4 mb-6 text-left">
+                          <h4 className="font-serif text-[18px] font-bold text-[#121212] tracking-tight mb-1">
+                            Fellowship Decision Memo Logs
+                          </h4>
+                          <span className="font-sans text-[11.5px] text-[#7A7A7A]">
+                            Every administrative approval and decline response is securely recorded in Firebase.
+                          </span>
+                        </div>
+
+                        {/* List items */}
+                        <div className="flex flex-col gap-4 text-justify">
+                          {decisionResponses.map((resp) => (
+                            <div 
+                              key={resp.id} 
+                              className="border border-[#D8D0C0]/60 bg-white hover:bg-[#F7F3EC]/5 p-5 rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-colors"
+                            >
+                              <div className="text-left space-y-1 max-w-[580px]">
+                                <div className="flex items-center gap-2">
+                                  <span className={`font-mono text-[9px] px-2 py-0.5 rounded-sm font-bold uppercase ${
+                                    resp.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {resp.status}
+                                  </span>
+                                  <span className="font-sans text-[10px] text-zinc-400">
+                                    MEMO REF: {resp.id}
+                                  </span>
+                                </div>
+                                <h5 className="font-serif text-[15.5px] font-bold text-[#121212] leading-snug">
+                                  {resp.applicantName} ({resp.applicantEmail})
+                                </h5>
+                                <p className="font-sans text-[13px] text-[#444444] leading-relaxed bg-[#FAF8F5] p-3 border border-neutral-200/60 rounded-xs italic m-0">
+                                  "{resp.feedback}"
+                                </p>
+                                <span className="font-mono text-[10px] text-[#7A7A7A] block mt-1">
+                                  Responded by {resp.respondedBy} on {new Date(resp.respondedAt).toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`Permanently delete this decision response record from Firebase?`)) {
+                                    if (onDeleteDecisionResponse) {
+                                      await onDeleteDecisionResponse(resp.id);
+                                    }
+                                  }
+                                }}
+                                className="text-[#7A7A7A] hover:text-red-700 p-2 hover:bg-red-50 rounded-sm bg-transparent border-none outline-none cursor-pointer transition-colors flex-shrink-0"
+                                title="Purge response statement"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          ))}
+
+                          {decisionResponses.length === 0 && (
+                            <div className="text-center py-12 border border-dashed border-[#D8D0C0] bg-neutral-50/45 rounded-sm">
+                              <p className="font-serif text-sm italic text-[#7A7A7A] m-0">
+                                No fellowship decision memo letters recorded.
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </motion.div>
                   )}

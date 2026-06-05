@@ -42,7 +42,18 @@ export interface MentorshipApp {
   discipline: string;
   proposal: string;
   focus: string;
-  status: 'PENDING ADMISSION REVIEW' | 'APPROVED';
+  status: 'PENDING ADMISSION REVIEW' | 'APPROVED' | 'DECLINED';
+}
+
+export interface DecisionResponse {
+  id: string;
+  appId: string;
+  applicantName: string;
+  applicantEmail: string;
+  status: 'APPROVED' | 'DECLINED';
+  feedback: string;
+  respondedAt: string;
+  respondedBy: string;
 }
 
 export interface Comment {

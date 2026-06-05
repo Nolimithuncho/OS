@@ -25,10 +25,14 @@ import {
   createComment, 
   deleteComment,
   FirebaseComment,
-  getAdmins
+  getAdmins,
+  getDecisionResponses,
+  createDecisionResponse,
+  deleteDecisionResponse,
+  FirebaseDecisionResponse
 } from './lib/firebaseService';
 import { initialEssays } from './data';
-import { Essay, Subscriber, MentorshipApp, Comment, User } from './types';
+import { Essay, Subscriber, MentorshipApp, Comment, User, DecisionResponse } from './types';
 
 export default function App() {
   const [activePage, setActivePage] = useState<string>(() => {
@@ -165,6 +169,11 @@ export default function App() {
     };
   });
 
+  const [decisionResponses, setDecisionResponses] = useState<DecisionResponse[]>(() => {
+    const cached = localStorage.getItem('osc_dec_responses');
+    return cached ? JSON.parse(cached) : [];
+  });
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Sync additional Firestore collections
@@ -205,6 +214,14 @@ export default function App() {
           } as any);
         });
         setCommentsMap(newCommentsMap);
+      }
+
+      // 4. Fetch Fellowship Decision Responses from Firestore if admin
+      if (isAdminUser) {
+        const reps = await getDecisionResponses();
+        if (reps) {
+          setDecisionResponses(reps as any);
+        }
       }
     } catch (err) {
       console.error("Failed to sync Firestore collections on runtime:", err);
@@ -356,6 +373,10 @@ export default function App() {
     localStorage.setItem('osc_comments', JSON.stringify(commentsMap));
   }, [commentsMap]);
 
+  useEffect(() => {
+    localStorage.setItem('osc_dec_responses', JSON.stringify(decisionResponses));
+  }, [decisionResponses]);
+
   // Action dispatches to manipulate shared structures with Firestore endpoints
   const handleAddNewSubscriber = async (sub: Subscriber) => {
     try {
@@ -402,12 +423,38 @@ export default function App() {
     }
   };
 
-  const handleUpdateMentorshipStatus = async (appId: string, status: 'PENDING ADMISSION REVIEW' | 'APPROVED') => {
+  const handleUpdateMentorshipStatus = async (
+    appId: string, 
+    status: 'PENDING ADMISSION REVIEW' | 'APPROVED' | 'DECLINED',
+    feedback?: string
+  ) => {
     try {
       await updateMentorshipAppStatus(appId, status);
       setMentorshipApps((prev) =>
         prev.map((app) => (app.id === appId ? { ...app, status } : app))
       );
+
+      // Save a structured decision response record to Firestore
+      if (status === 'APPROVED' || status === 'DECLINED') {
+        const app = mentorshipApps.find(a => a.id === appId);
+        if (app) {
+          const finalFeedback = feedback?.trim() || `Administrative review complete. Fellowship application was ${status === 'APPROVED' ? 'approved' : 'declined'}.`;
+          const responseId = `resp-${Date.now()}`;
+          const responseRecord: DecisionResponse = {
+            id: responseId,
+            appId: appId,
+            applicantName: app.name,
+            applicantEmail: app.email,
+            status,
+            feedback: finalFeedback,
+            respondedAt: new Date().toISOString(),
+            respondedBy: currentUser?.email || 'admin@chancellery.org'
+          };
+          
+          await createDecisionResponse(responseRecord);
+          setDecisionResponses((prev) => [responseRecord, ...prev]);
+        }
+      }
     } catch (err) {
       console.error("Mentorship state write failure:", err);
       setMentorshipApps((prev) =>
@@ -424,6 +471,30 @@ export default function App() {
       console.error("Mentorship delete failure:", err);
       setMentorshipApps((prev) => prev.filter((app) => app.id !== appId));
     }
+  };
+
+  const handleDeleteDecisionResponse = async (id: string) => {
+    try {
+      await deleteDecisionResponse(id);
+      setDecisionResponses((prev) => prev.filter((r) => r.id !== id));
+    } catch (err) {
+      console.error("Decision response delete failure:", err);
+      setDecisionResponses((prev) => prev.filter((r) => r.id !== id));
+    }
+  };
+
+  const handleDeleteSubscriber = async (email: string) => {
+    try {
+      await deleteSubscriber(email);
+      setSubscribersList((prev) => prev.filter((s) => s.email.toLowerCase() !== email.toLowerCase()));
+    } catch (err) {
+      console.error("Subscriber delete failure:", err);
+      setSubscribersList((prev) => prev.filter((s) => s.email.toLowerCase() !== email.toLowerCase()));
+    }
+  };
+
+  const handleDeleteEssay = (id: string) => {
+    setEssaysList((prev) => prev.filter((e) => e.id !== id));
   };
 
   const handleAddComment = async (essayId: string, newComment: Comment) => {
@@ -567,8 +638,10 @@ export default function App() {
           <Admin
             essaysList={essaysList}
             onAddEssay={handleAddNewEssay}
+            onDeleteEssay={handleDeleteEssay}
             subscribersList={subscribersList}
             onAddSubscriber={handleAddNewSubscriber}
+            onDeleteSubscriber={handleDeleteSubscriber}
             mentorshipApps={mentorshipApps}
             onUpdateAppStatus={handleUpdateMentorshipStatus}
             onDeleteApp={handleDeleteMentorshipApp}
@@ -578,6 +651,8 @@ export default function App() {
             setCurrentUser={setCurrentUser}
             contentItems={contentItems}
             refreshContent={refreshContent}
+            decisionResponses={decisionResponses}
+            onDeleteDecisionResponse={handleDeleteDecisionResponse}
           />
         );
       default:
