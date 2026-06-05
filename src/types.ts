@@ -57,3 +57,11 @@ export interface User {
   name: string;
   code?: string;
 }
+
+export interface AdminUser {
+  name: string;
+  email: string;
+  password?: string;
+  addedAt: string;
+}
+

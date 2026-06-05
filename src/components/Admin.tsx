@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LogOut, BookOpen, Users, MessageSquare, PlusCircle, CheckCircle, Trash2, Key, AlertCircle, FileText, Search, ShieldAlert, BadgeInfo, FolderEdit, Settings, Edit3, Image, FileUp, Globe, Eye, EyeOff, Loader2, Mail, ArrowRight } from 'lucide-react';
 import { Essay, Subscriber, MentorshipApp, Comment, User } from '../types';
-import { ContentItem, uploadFile, createContentItem, updateContentItem, deleteContentItem, isMockConfig, FirebaseAdmin, getAdmins, createAdmin, deleteAdmin, getAdminPassphrase, updateAdminPassphrase } from '../lib/firebaseService';
+import { ContentItem, uploadFile, createContentItem, updateContentItem, deleteContentItem, isMockConfig, FirebaseAdmin, getAdmins, createAdmin, deleteAdmin, getAdminPassphrase, updateAdminPassphrase, getAdminUserByEmail } from '../lib/firebaseService';
 import { signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../firebase';
 
@@ -38,12 +38,11 @@ export const Admin: React.FC<AdminProps> = ({
   refreshContent
 }) => {
   // Login flow states
-  const [isSubscriberPortal, setIsSubscriberPortal] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
   const [passphrase, setPassphrase] = useState('');
-  const [emailInput, setEmailInput] = useState('');
-  const [memberCodeInput, setMemberCodeInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Dashboard navigation tab: 'overview' | 'essays' | 'subscribers' | 'mentorship' | 'comments' | 'cms' | 'settings'
   const [activeTab, setActiveTab] = useState<'overview' | 'essays' | 'subscribers' | 'mentorship' | 'comments' | 'cms' | 'settings'>('overview');
@@ -324,21 +323,19 @@ export const Admin: React.FC<AdminProps> = ({
     setLoginLoading(true);
 
     try {
-      if (isSubscriberPortal) {
-        // Find if this subscriber exists in current register
-        const cleanEmail = emailInput.trim().toLowerCase();
-        const foundSub = subscribersList.find((s) => s.email.toLowerCase() === cleanEmail);
-
-        if (foundSub) {
+      const cleanEmail = adminEmail.trim().toLowerCase();
+      if (cleanEmail) {
+        // Find custom database-registered admin user
+        const foundAdmin = await getAdminUserByEmail(cleanEmail);
+        if (foundAdmin && foundAdmin.password && passphrase.trim() === foundAdmin.password.trim()) {
           setCurrentUser({
-            role: 'subscriber',
-            email: foundSub.email,
-            name: foundSub.name,
-            code: foundSub.code
+            role: 'admin',
+            email: foundAdmin.email,
+            name: foundAdmin.name
           });
           setLoginLoading(false);
         } else {
-          setLoginError("This email is not registered inside the alert server. Navigate to 'Subscribe' or register your profile.");
+          setLoginError(`Invalid administrator email or password combination.`);
           setLoginLoading(false);
         }
       } else {
@@ -352,7 +349,7 @@ export const Admin: React.FC<AdminProps> = ({
           });
           setLoginLoading(false);
         } else {
-          setLoginError(`Invalid passphrase. Please enter the correct authorized console entry passphrase.`);
+          setLoginError(`Invalid credentials. Please specify a correct administrator email or authorized passphrase.`);
           setLoginLoading(false);
         }
       }
@@ -372,9 +369,8 @@ export const Admin: React.FC<AdminProps> = ({
       console.error("Firebase sign out failed: ", err);
     }
     setCurrentUser(null);
+    setAdminEmail('');
     setPassphrase('');
-    setEmailInput('');
-    setMemberCodeInput('');
     setLoginError('');
   };
 
@@ -472,51 +468,9 @@ export const Admin: React.FC<AdminProps> = ({
                   <h2 className="font-serif text-[30px] sm:text-[34px] font-bold tracking-normal text-[#121212] leading-tight">
                     Osita Chidoka Connect
                   </h2>
-                  <p className="font-sans text-[13px] text-[#7A7A7A] mt-2.5 leading-relaxed max-w-[420px] mx-auto">
-                    Access the digital administrative system and personal subscriber dashboard.
+                  <p className="font-sans text-[13.5px] text-[#7A7A7A] mt-2.5 leading-relaxed max-w-[420px] mx-auto">
+                    Access the digital administrative system and publisher interface.
                   </p>
-                </div>
-
-                {/* Tabs */}
-                <div className="grid grid-cols-2 border-b border-[#D8D0C0] mb-8">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSubscriberPortal(false);
-                      setLoginError('');
-                    }}
-                    className={`font-sans text-[10.5px] font-bold tracking-widest uppercase pb-3.5 cursor-pointer relative transition-colors outline-none border-none bg-transparent ${
-                      !isSubscriberPortal ? 'text-[#121212]' : 'text-[#A39E93] hover:text-[#121212]'
-                    }`}
-                  >
-                    Administrator Portal
-                    {!isSubscriberPortal && (
-                      <motion.div
-                        layoutId="login-tab-underline"
-                        className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-[#9B7A2F]"
-                        transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-                      />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSubscriberPortal(true);
-                      setLoginError('');
-                    }}
-                    className={`font-sans text-[10.5px] font-bold tracking-widest uppercase pb-3.5 cursor-pointer relative transition-colors outline-none border-none bg-transparent ${
-                      isSubscriberPortal ? 'text-[#121212]' : 'text-[#A39E93] hover:text-[#121212]'
-                    }`}
-                  >
-                    Subscriber Registry
-                    {isSubscriberPortal && (
-                      <motion.div
-                        layoutId="login-tab-underline"
-                        className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-[#9B7A2F]"
-                        transition={{ type: 'spring', stiffness: 350, damping: 28 }}
-                      />
-                    )}
-                  </button>
                 </div>
 
                 {loginError && (
@@ -527,75 +481,56 @@ export const Admin: React.FC<AdminProps> = ({
                 )}
 
                 <form onSubmit={handleLoginSubmit} className="flex flex-col gap-6">
-                  {!isSubscriberPortal ? (
-                    /* Admin Passphrase Input */
-                    <div className="flex flex-col gap-1.5 relative animate-fadeIn">
+                  {/* Admin Email Input */}
+                  <div className="flex flex-col gap-1.5 relative">
+                    <div className="flex items-center gap-1.5 text-[#9B7A2F]">
+                      <Mail size={13} className="text-[#9B7A2F]" />
+                      <label className="font-sans text-[10px] font-bold text-[#9B7A2F] tracking-wider uppercase">
+                        Admin Email Address
+                      </label>
+                      <span className="font-sans text-[9px] text-[#A49E94] uppercase tracking-wider ml-auto">
+                        Optional for bypass
+                      </span>
+                    </div>
+                    <input
+                      type="email"
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      placeholder="e.g. admin@chancellery.org"
+                      className="bg-transparent border-t-0 border-x-0 border-b border-[#D8D0C0]/85 focus:border-[#9B7A2F] outline-none pb-2 pt-1 font-sans text-sm text-[#121212] placeholder-[#A49E94]/60 transition-colors duration-200 w-full"
+                    />
+                  </div>
+
+                  {/* Password / Passphrase Input */}
+                  <div className="flex flex-col gap-1.5 relative">
+                    <div className="flex justify-between items-center">
                       <div className="flex items-center gap-1.5 text-[#9B7A2F]">
                         <Key size={13} className="text-[#9B7A2F]" />
                         <label className="font-sans text-[10px] font-bold text-[#9B7A2F] tracking-wider uppercase">
-                          Console Passphrase
+                          Password or Console Passphrase
                         </label>
                       </div>
-                      <input
-                        type="password"
-                        required
-                        value={passphrase}
-                        onChange={(e) => setPassphrase(e.target.value)}
-                        placeholder="Enter admin credentials..."
-                        className="bg-transparent border-t-0 border-x-0 border-b border-[#D8D0C0]/85 focus:border-[#9B7A2F] outline-none pb-2 pt-1 font-sans text-sm text-[#121212] placeholder-[#A49E94]/60 transition-colors duration-200 w-full"
-                      />
-                      <p className="font-sans text-[11px] italic text-[#7A7A7A] leading-relaxed mt-2.5 text-left">
-                        Specify the master console credentials issued directly by the Office of the Chancellor to manage the digital publishing interface.
-                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="text-[#9B7A2F] hover:text-[#121212] text-[10px] font-semibold flex items-center gap-1 bg-transparent border-none cursor-pointer outline-none"
+                      >
+                        {showPassword ? <EyeOff size={11} /> : <Eye size={11} />}
+                        {showPassword ? 'Hide' : 'Show'}
+                      </button>
                     </div>
-                  ) : (
-                    /* Subscriber Email & Optional Code Lookup */
-                    <div className="flex flex-col gap-6 animate-fadeIn">
-                      {/* Email Row */}
-                      <div className="flex flex-col gap-1.5 relative">
-                        <div className="flex items-center gap-1.5 text-[#9B7A2F]">
-                          <Mail size={13} className="text-[#9B7A2F]" />
-                          <label className="font-sans text-[10px] font-bold text-[#9B7A2F] tracking-wider uppercase">
-                            Subscriber Email Address
-                          </label>
-                        </div>
-                        <input
-                          type="email"
-                          required
-                          value={emailInput}
-                          onChange={(e) => setEmailInput(e.target.value)}
-                          placeholder="amina@athena.org"
-                          className="bg-transparent border-t-0 border-x-0 border-b border-[#D8D0C0]/85 focus:border-[#9B7A2F] outline-none pb-2 pt-1 font-sans text-sm text-[#121212] placeholder-[#A49E94]/60 transition-colors duration-200 w-full"
-                        />
-                      </div>
-
-                      {/* Code Row */}
-                      <div className="flex flex-col gap-1.5 relative">
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-1.5 text-[#9B7A2F]">
-                            <Key size={13} className="text-[#9B7A2F]" />
-                            <label className="font-sans text-[10px] font-bold text-[#9B7A2F] tracking-wider uppercase">
-                              Member Registry Code
-                            </label>
-                          </div>
-                          <span className="font-sans text-[9px] font-bold text-[#A49E94] uppercase tracking-wider">
-                            (Optional)
-                          </span>
-                        </div>
-                        <input
-                          type="text"
-                          value={memberCodeInput}
-                          onChange={(e) => setMemberCodeInput(e.target.value)}
-                          placeholder="e.g. OSC-SUB-193"
-                          className="bg-transparent border-t-0 border-x-0 border-b border-[#D8D0C0]/85 focus:border-[#9B7A2F] outline-none pb-2 pt-1 font-sans text-sm text-[#121212] placeholder-[#A49E94]/60 transition-colors duration-200 w-full font-mono"
-                        />
-                      </div>
-
-                      <p className="font-sans text-[11px] italic text-[#7A7A7A] leading-relaxed mt-1 text-left">
-                        Enter the email you registered with on the Subscribe form to look up your personal alert profile, saved reads, and member registry details.
-                      </p>
-                    </div>
-                  )}
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={passphrase}
+                      onChange={(e) => setPassphrase(e.target.value)}
+                      placeholder="Enter credentials..."
+                      className="bg-transparent border-t-0 border-x-0 border-b border-[#D8D0C0]/85 focus:border-[#9B7A2F] outline-none pb-2 pt-1 font-sans text-sm text-[#121212] placeholder-[#A49E94]/60 transition-colors duration-200 w-full"
+                    />
+                    <p className="font-sans text-[11px] italic text-[#7A7A7A] leading-relaxed mt-2.5 text-left">
+                      Provide either your personal administrator account credentials or the global console entry passphrase.
+                    </p>
+                  </div>
 
                   <button
                     type="submit"

@@ -837,3 +837,95 @@ export async function updateAdminPassphrase(passphrase: string): Promise<void> {
   }
 }
 
+export interface FirebaseAdminUser {
+  name: string;
+  email: string;
+  password?: string;
+  addedAt: string;
+}
+
+const LOCAL_ADMIN_USERS_KEY = 'osc_firebase_admin_users';
+
+export async function getAdminUsers(): Promise<FirebaseAdminUser[]> {
+  if (isMockConfig) {
+    const cached = localStorage.getItem(LOCAL_ADMIN_USERS_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+
+  try {
+    const colRef = collection(db, 'admin_users');
+    const snapshot = await getDocs(colRef);
+    const items = snapshot.docs.map(d => ({ email: d.id, ...d.data() } as FirebaseAdminUser));
+    localStorage.setItem(LOCAL_ADMIN_USERS_KEY, JSON.stringify(items));
+    return items;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.LIST, 'admin_users');
+    }
+    console.error('Firestore getAdminUsers failed, returning local cache:', err);
+    const cached = localStorage.getItem(LOCAL_ADMIN_USERS_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+}
+
+export async function createAdminUser(user: { name: string; email: string; password?: string }): Promise<FirebaseAdminUser> {
+  const finalUser: FirebaseAdminUser = {
+    name: user.name.trim(),
+    email: user.email.toLowerCase().trim(),
+    password: user.password || '',
+    addedAt: new Date().toISOString()
+  };
+
+  if (isMockConfig) {
+    const users = await getAdminUsers();
+    const updated = [finalUser, ...users.filter(u => u.email !== finalUser.email)];
+    localStorage.setItem(LOCAL_ADMIN_USERS_KEY, JSON.stringify(updated));
+    return finalUser;
+  }
+
+  try {
+    const docRef = doc(db, 'admin_users', finalUser.email);
+    await setDoc(docRef, finalUser);
+    
+    // Also add to admins collection so that standard isAdmin() rules verify their email
+    const docRefAdmins = doc(db, 'admins', finalUser.email);
+    await setDoc(docRefAdmins, { email: finalUser.email, addedAt: finalUser.addedAt });
+
+    const users = await getAdminUsers();
+    const updated = [finalUser, ...users.filter(u => u.email !== finalUser.email)];
+    localStorage.setItem(LOCAL_ADMIN_USERS_KEY, JSON.stringify(updated));
+    return finalUser;
+  } catch (err) {
+    if (isPermissionError(err)) {
+      handleFirestoreError(err, OperationType.WRITE, `admin_users/${finalUser.email}`);
+    }
+    console.error('Firestore createAdminUser crashed, fallback to local storage:', err);
+    const users = await getAdminUsers();
+    const updated = [finalUser, ...users.filter(u => u.email !== finalUser.email)];
+    localStorage.setItem(LOCAL_ADMIN_USERS_KEY, JSON.stringify(updated));
+    return finalUser;
+  }
+}
+
+export async function getAdminUserByEmail(email: string): Promise<FirebaseAdminUser | null> {
+  const cleanEmail = email.toLowerCase().trim();
+  if (isMockConfig) {
+    const users = await getAdminUsers();
+    return users.find(u => u.email === cleanEmail) || null;
+  }
+
+  try {
+    const docRef = doc(db, 'admin_users', cleanEmail);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      return { email: docSnap.id, ...docSnap.data() } as FirebaseAdminUser;
+    }
+    const list = await getAdminUsers();
+    return list.find(u => u.email === cleanEmail) || null;
+  } catch (err) {
+    console.error(`Firestore getAdminUserByEmail (${cleanEmail}) failed:`, err);
+    const users = await getAdminUsers();
+    return users.find(u => u.email === cleanEmail) || null;
+  }
+}
+

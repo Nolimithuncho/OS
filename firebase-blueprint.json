@@ -162,6 +162,26 @@
       },
       "required": ["email"]
     },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Administrator login credentials with email and password",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "addedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["name", "email", "password"]
+    },
     "AdminPassphrase": {
       "title": "AdminPassphrase",
       "description": "Fallback entry console passphrase",
@@ -198,6 +218,10 @@
     "admins/{email}": {
       "schema": "Admin",
       "description": "Authorized administrator emails"
+    },
+    "admin_users/{email}": {
+      "schema": "AdminUser",
+      "description": "Durable credentials for administrator profiles with password login"
     },
     "config/{documentId}": {
       "schema": "AdminPassphrase",

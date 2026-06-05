@@ -50,6 +50,14 @@ service cloud.firestore {
         && (!('addedAt' in data) || (data.addedAt is string && data.addedAt.size() <= 128));
     }
 
+    function isValidAdminUserDoc(data) {
+      return data.keys().hasAll(['name', 'email', 'password'])
+        && data.name is string && data.name.size() <= 256
+        && data.email is string && data.email.size() <= 256
+        && data.password is string && data.password.size() <= 128
+        && (!('addedAt' in data) || (data.addedAt is string && data.addedAt.size() <= 128));
+    }
+
     function isValidConfigDoc(data) {
       return data.keys().hasAll(['passphrase'])
         && data.keys().size() == 1
@@ -174,7 +182,7 @@ service cloud.firestore {
 
     // 6. Admins Directory - Readable by signed-in users, writable by existing Admins
     match /admins/{email} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdmin() && isValidEmailId(email) && isValidAdminDoc(incoming());
     }
 
@@ -182,6 +190,13 @@ service cloud.firestore {
     match /config/{documentId} {
       allow read: if true;
       allow write: if isAdmin() && isValidId(documentId) && isValidConfigDoc(incoming());
+    }
+
+    // 8. Admin Users Credentials List - Readers can fetch a document by ID during login, writable by existing Admins
+    match /admin_users/{email} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow write: if isAdmin() && isValidEmailId(email) && isValidAdminUserDoc(incoming());
     }
   }
 }
