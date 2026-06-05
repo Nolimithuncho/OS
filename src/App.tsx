@@ -62,18 +62,6 @@ export default function App() {
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [loadingContent, setLoadingContent] = useState(true);
 
-  const refreshContent = async (isAdminUser?: boolean) => {
-    try {
-      const isUserAdmin = isAdminUser !== undefined ? isAdminUser : (currentUser?.role === 'admin');
-      const items = await getContentItems(isUserAdmin);
-      setContentItems(items);
-    } catch (e) {
-      console.error("Error fetching dynamic section elements:", e);
-    } finally {
-      setLoadingContent(false);
-    }
-  };
-
   // Essays List state
   const [essaysList, setEssaysList] = useState<Essay[]>(() => {
     const cached = localStorage.getItem('osc_essays');
@@ -225,6 +213,19 @@ export default function App() {
       }
     } catch (err) {
       console.error("Failed to sync Firestore collections on runtime:", err);
+    }
+  };
+
+  const refreshContent = async (isAdminUser?: boolean) => {
+    try {
+      const isUserAdmin = isAdminUser !== undefined ? isAdminUser : (currentUser?.role === 'admin');
+      const items = await getContentItems(isUserAdmin);
+      setContentItems(items);
+      await syncFirestoreCollections(isUserAdmin);
+    } catch (e) {
+      console.error("Error fetching dynamic section elements:", e);
+    } finally {
+      setLoadingContent(false);
     }
   };
 

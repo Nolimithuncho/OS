@@ -398,6 +398,13 @@ export async function getSubscribers(): Promise<FirebaseSubscriber[]> {
     return cached ? JSON.parse(cached) : [];
   }
 
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.warn('Skipping Firestore subscribers list fetch: User not authenticated.');
+    const cached = localStorage.getItem(LOCAL_SUBS_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+
   try {
     const colRef = collection(db, 'subscribers');
     const snapshot = await getDocs(colRef);
@@ -405,9 +412,6 @@ export async function getSubscribers(): Promise<FirebaseSubscriber[]> {
     localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(items));
     return items;
   } catch (err) {
-    if (isPermissionError(err)) {
-      handleFirestoreError(err, OperationType.LIST, 'subscribers');
-    }
     console.error('Firestore getSubscribers failed, returning local storage cache:', err);
     const cached = localStorage.getItem(LOCAL_SUBS_KEY);
     return cached ? JSON.parse(cached) : [];
@@ -455,6 +459,10 @@ export async function getSubscriberByEmail(email: string): Promise<FirebaseSubsc
     return subs.find(s => s.email.toLowerCase() === email.toLowerCase()) || null;
   }
 
+  if (!auth.currentUser) {
+    return null;
+  }
+
   try {
     const docRef = doc(db, 'subscribers', email.toLowerCase());
     const docSnap = await getDoc(docRef);
@@ -479,6 +487,12 @@ export async function deleteSubscriber(email: string): Promise<void> {
   try {
     const docRef = doc(db, 'subscribers', email.toLowerCase());
     await deleteDoc(docRef);
+    const cached = localStorage.getItem(LOCAL_SUBS_KEY);
+    if (cached) {
+      const subs: FirebaseSubscriber[] = JSON.parse(cached);
+      const filtered = subs.filter(s => s.email.toLowerCase() !== email.toLowerCase());
+      localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(filtered));
+    }
   } catch (err) {
     if (isPermissionError(err)) {
       handleFirestoreError(err, OperationType.DELETE, `subscribers/${email}`);
@@ -502,6 +516,7 @@ export interface FirebaseMentorshipApp {
   status: 'PENDING ADMISSION REVIEW' | 'APPROVED' | 'DECLINED';
   userId?: string;
   createdAt?: string;
+  _unsynced?: boolean;
 }
 
 export async function getMentorshipApps(isAdminUser?: boolean): Promise<FirebaseMentorshipApp[]> {
@@ -510,9 +525,16 @@ export async function getMentorshipApps(isAdminUser?: boolean): Promise<Firebase
     return cached ? JSON.parse(cached) : [];
   }
 
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.warn('Skipping Firestore mentorship apps fetch: User not authenticated.');
+    const cached = localStorage.getItem(LOCAL_MENTORSHIP_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+
   try {
-    const currentUid = auth.currentUser?.uid;
-    const email = auth.currentUser?.email || '';
+    const currentUid = currentUser.uid;
+    const email = currentUser.email || '';
     const isUserAdmin = isAdminUser !== undefined 
       ? isAdminUser 
       : (email.toLowerCase().trim() === 'japhetprosper13@gmail.com' || email.toLowerCase().trim() === 'admin@chancellery.org');
@@ -523,13 +545,19 @@ export async function getMentorshipApps(isAdminUser?: boolean): Promise<Firebase
       if (cached) {
         const localApps: FirebaseMentorshipApp[] = JSON.parse(cached);
         for (const app of localApps) {
-          if (app.id) {
+          if (app.id && app._unsynced) {
+            // Only sync if admin, or if it is our own app or a guest/new app
+            const isOwner = app.userId === currentUid || app.userId === 'guest' || !app.userId;
+            if (!isUserAdmin && !isOwner) {
+              continue;
+            }
             const docRef = doc(db, 'mentorship', app.id);
             const docSnap = await getDoc(docRef);
             if (!docSnap.exists()) {
               console.log('Background syncing offline application to Firestore:', app.id);
+              const { _unsynced, ...cleanApp } = app;
               await setDoc(docRef, {
-                ...app,
+                ...cleanApp,
                 createdAt: app.createdAt || new Date().toISOString(),
                 status: app.status || 'PENDING ADMISSION REVIEW',
                 userId: app.userId !== 'guest' ? app.userId : (currentUid || 'guest')
@@ -597,9 +625,10 @@ export async function createMentorshipApp(app: FirebaseMentorshipApp): Promise<F
     }
     console.error('Firestore createMentorshipApp crash, caching offline:', err);
     const apps = await getMentorshipApps();
-    const updated = [finalApp, ...apps.filter(a => a.id !== app.id)];
+    const offlineApp: FirebaseMentorshipApp = { ...finalApp, _unsynced: true };
+    const updated = [offlineApp, ...apps.filter(a => a.id !== app.id)];
     localStorage.setItem(LOCAL_MENTORSHIP_KEY, JSON.stringify(updated));
-    return finalApp;
+    return offlineApp;
   }
 }
 
@@ -633,6 +662,12 @@ export async function deleteMentorshipApp(appId: string): Promise<void> {
   try {
     const docRef = doc(db, 'mentorship', appId);
     await deleteDoc(docRef);
+    const cached = localStorage.getItem(LOCAL_MENTORSHIP_KEY);
+    if (cached) {
+      const apps: FirebaseMentorshipApp[] = JSON.parse(cached);
+      const filtered = apps.filter(app => app.id !== appId);
+      localStorage.setItem(LOCAL_MENTORSHIP_KEY, JSON.stringify(filtered));
+    }
   } catch (err) {
     if (isPermissionError(err)) {
       handleFirestoreError(err, OperationType.DELETE, `mentorship/${appId}`);
@@ -981,6 +1016,13 @@ export async function getDecisionResponses(): Promise<FirebaseDecisionResponse[]
     return cached ? JSON.parse(cached) : [];
   }
 
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    console.warn('Skipping Firestore decision responses fetch: User not authenticated.');
+    const cached = localStorage.getItem(LOCAL_RESPONSES_KEY);
+    return cached ? JSON.parse(cached) : [];
+  }
+
   try {
     const colRef = collection(db, 'responses');
     const snapshot = await getDocs(colRef);
@@ -988,9 +1030,6 @@ export async function getDecisionResponses(): Promise<FirebaseDecisionResponse[]
     localStorage.setItem(LOCAL_RESPONSES_KEY, JSON.stringify(items));
     return items;
   } catch (err) {
-    if (isPermissionError(err)) {
-      handleFirestoreError(err, OperationType.LIST, 'responses');
-    }
     console.error('Firestore getDecisionResponses failed, fall back to cache:', err);
     const cached = localStorage.getItem(LOCAL_RESPONSES_KEY);
     return cached ? JSON.parse(cached) : [];

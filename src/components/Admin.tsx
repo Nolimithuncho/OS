@@ -343,13 +343,14 @@ export const Admin: React.FC<AdminProps> = ({
         if (foundAdmin && foundAdmin.password && inputPassword === foundAdmin.password.trim()) {
           // If Firestore is real, authenticate in Firebase Auth
           if (!isMockConfig) {
+            const authPassword = inputPassword.length >= 6 ? inputPassword : `${inputPassword}_v1_secure`;
             try {
-              await signInWithEmailAndPassword(auth, foundAdmin.email, inputPassword);
+              await signInWithEmailAndPassword(auth, foundAdmin.email, authPassword);
             } catch (authErr: any) {
               console.warn("Firebase email auth account not found or failed, attempts to auto-register: ", authErr);
               if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential' || authErr.code === 'auth/invalid-login-credentials') {
                 try {
-                  await createUserWithEmailAndPassword(auth, foundAdmin.email, inputPassword);
+                  await createUserWithEmailAndPassword(auth, foundAdmin.email, authPassword);
                 } catch (createErr: any) {
                   console.error("Could not register custom admin in Firebase Auth: ", createErr);
                 }
@@ -376,12 +377,13 @@ export const Admin: React.FC<AdminProps> = ({
           const fallbackEmail = 'admin@chancellery.org';
           // Ensure we are signed into auth for fallback admin
           if (!isMockConfig) {
+            const authPassword = inputPassword.length >= 6 ? inputPassword : `${inputPassword}_v1_secure`;
             try {
-              await signInWithEmailAndPassword(auth, fallbackEmail, inputPassword);
+              await signInWithEmailAndPassword(auth, fallbackEmail, authPassword);
             } catch (authErr: any) {
               console.warn("Fallback auth account not found or failed, attempts to register: ", authErr);
               try {
-                await createUserWithEmailAndPassword(auth, fallbackEmail, inputPassword);
+                await createUserWithEmailAndPassword(auth, fallbackEmail, authPassword);
               } catch (createErr) {
                 console.error("Could not register fallback admin in Firebase Auth: ", createErr);
               }
