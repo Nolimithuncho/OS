@@ -421,8 +421,9 @@ export async function createSubscriber(sub: FirebaseSubscriber): Promise<Firebas
   };
 
   if (isMockConfig) {
-    const subs = await getSubscribers();
-    const updated = [finalSub, ...subs.filter(s => s.email.toLowerCase() !== sub.email.toLowerCase())];
+    const cached = localStorage.getItem(LOCAL_SUBS_KEY);
+    const existing = cached ? JSON.parse(cached) : [];
+    const updated = [finalSub, ...existing.filter((s: any) => s.email.toLowerCase() !== sub.email.toLowerCase())];
     localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(updated));
     return finalSub;
   }
@@ -430,8 +431,9 @@ export async function createSubscriber(sub: FirebaseSubscriber): Promise<Firebas
   try {
     const docRef = doc(db, 'subscribers', sub.email.toLowerCase());
     await setDoc(docRef, finalSub);
-    const subs = await getSubscribers();
-    const updated = [finalSub, ...subs.filter(s => s.email.toLowerCase() !== sub.email.toLowerCase())];
+    const cached = localStorage.getItem(LOCAL_SUBS_KEY);
+    const existing: any[] = cached ? JSON.parse(cached) : [];
+    const updated = [finalSub, ...existing.filter(s => s.email.toLowerCase() !== sub.email.toLowerCase())];
     localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(updated));
     return finalSub;
   } catch (err) {
@@ -439,8 +441,9 @@ export async function createSubscriber(sub: FirebaseSubscriber): Promise<Firebas
       handleFirestoreError(err, OperationType.WRITE, `subscribers/${sub.email}`);
     }
     console.error('Firestore createSubscriber crashed, fallback to local storage:', err);
-    const subs = await getSubscribers();
-    const updated = [finalSub, ...subs.filter(s => s.email.toLowerCase() !== sub.email.toLowerCase())];
+    const cached = localStorage.getItem(LOCAL_SUBS_KEY);
+    const existing: any[] = cached ? JSON.parse(cached) : [];
+    const updated = [finalSub, ...existing.filter(s => s.email.toLowerCase() !== sub.email.toLowerCase())];
     localStorage.setItem(LOCAL_SUBS_KEY, JSON.stringify(updated));
     return finalSub;
   }
@@ -501,7 +504,7 @@ export interface FirebaseMentorshipApp {
   createdAt?: string;
 }
 
-export async function getMentorshipApps(): Promise<FirebaseMentorshipApp[]> {
+export async function getMentorshipApps(isAdminUser?: boolean): Promise<FirebaseMentorshipApp[]> {
   if (isMockConfig) {
     const cached = localStorage.getItem(LOCAL_MENTORSHIP_KEY);
     return cached ? JSON.parse(cached) : [];
@@ -510,7 +513,9 @@ export async function getMentorshipApps(): Promise<FirebaseMentorshipApp[]> {
   try {
     const currentUid = auth.currentUser?.uid;
     const email = auth.currentUser?.email || '';
-    const isUserAdmin = email === 'japhetprosper13@gmail.com' || email === 'admin@chancellery.org';
+    const isUserAdmin = isAdminUser !== undefined 
+      ? isAdminUser 
+      : (email.toLowerCase().trim() === 'japhetprosper13@gmail.com' || email.toLowerCase().trim() === 'admin@chancellery.org');
 
     let snapshot;
     if (isUserAdmin) {

@@ -60,7 +60,8 @@ export default function App() {
 
   const refreshContent = async (isAdminUser?: boolean) => {
     try {
-      const items = await getContentItems(isAdminUser);
+      const isUserAdmin = isAdminUser !== undefined ? isAdminUser : (currentUser?.role === 'admin');
+      const items = await getContentItems(isUserAdmin);
       setContentItems(items);
     } catch (e) {
       console.error("Error fetching dynamic section elements:", e);
@@ -178,7 +179,7 @@ export default function App() {
       }
 
       // 2. Fetch Mentorship applications
-      const apps = await getMentorshipApps();
+      const apps = await getMentorshipApps(isAdminUser);
       if (apps && apps.length > 0) {
         setMentorshipApps(apps as any);
       }
@@ -550,6 +551,7 @@ export default function App() {
             parentCommentsMap={commentsMap}
             onAddComment={handleAddComment}
             currentUser={currentUser}
+            contentItems={contentItems}
           />
         );
       case 'mentorship':

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Download, CheckCircle, MessageSquare, Search, BookOpen, ArrowUpRight } from 'lucide-react';
-import { Essay, Comment, User } from '../types';
+import { ArrowLeft, Download, CheckCircle, MessageSquare, Search, BookOpen, ArrowUpRight, FileText, Image as ImageIcon, ExternalLink } from 'lucide-react';
+import { Essay, Comment, User, ContentItem } from '../types';
 
 interface CanonProps {
   selectedEssayId: string | null;
@@ -10,6 +10,7 @@ interface CanonProps {
   parentCommentsMap: Record<string, Comment[]>;
   onAddComment: (essayId: string, newComment: Comment) => void;
   currentUser?: User | null;
+  contentItems?: ContentItem[];
 }
 
 export const Canon: React.FC<CanonProps> = ({
@@ -18,7 +19,8 @@ export const Canon: React.FC<CanonProps> = ({
   parentEssaysList,
   parentCommentsMap,
   onAddComment,
-  currentUser
+  currentUser,
+  contentItems = []
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -45,6 +47,20 @@ export const Canon: React.FC<CanonProps> = ({
     const cats = essays.map((essay) => essay.category);
     return ['ALL', ...Array.from(new Set(cats))];
   }, [essays]);
+
+  // Filter and sort Documents section from CMS
+  const cmsDocuments = useMemo(() => {
+    return contentItems
+      .filter((item) => item.section === 'documents' && item.status === 'published')
+      .sort((a, b) => a.order - b.order);
+  }, [contentItems]);
+
+  // Filter and sort Gallery/Media section from CMS
+  const cmsGallery = useMemo(() => {
+    return contentItems
+      .filter((item) => item.section === 'gallery' && item.status === 'published')
+      .sort((a, b) => a.order - b.order);
+  }, [contentItems]);
 
   const activeEssay = useMemo(() => {
     return essays.find((essay) => essay.id === selectedEssayId) || null;
@@ -528,6 +544,154 @@ ${activeEssay.content}
                 </div>
               )}
             </div>
+
+            {/* Dynamic CMS-backed Governance Documents Section */}
+            {cmsDocuments.length > 0 && (
+              <div id="cms-governance-docs-section" className="border-t border-[#D8D0C0] mt-24 pt-16 max-w-[960px] mx-auto px-6 sm:px-12 md:px-16">
+                <div className="mb-10">
+                  <span className="font-sans text-[11px] font-bold tracking-[0.2em] text-[#9B7A2F] uppercase block mb-3 font-semibold">
+                    Cabinet Archives & Briefs
+                  </span>
+                  <h3 className="font-serif text-[28px] sm:text-[34px] font-black tracking-tight text-[#121212]">
+                    Official Governance Documents
+                  </h3>
+                  <p className="font-serif text-[15px] italic text-[#7A7A7A] leading-relaxed mt-2 text-justify">
+                    Primary administrative dossiers, policy drafts, transition papers, and legal memorandum records.
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {cmsDocuments.map((docItem) => (
+                    <motion.div
+                      key={docItem.id}
+                      initial={{ opacity: 0, y: 15 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      className="p-6 bg-white/50 border border-[#D8D0C0] rounded-sm shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-start gap-4 mb-3">
+                          <div className="p-3 bg-[#9B7A2F]/10 rounded-sm text-[#9B7A2F]">
+                            <FileText size={20} />
+                          </div>
+                          <div>
+                            <span className="font-mono text-[9px] font-bold text-[#9B7A2F] block tracking-widest uppercase">
+                              {docItem.fileType || 'PDF DOCUMENT'}
+                            </span>
+                            <h4 className="font-serif text-[17.5px] font-bold text-[#121212] tracking-tight mt-0.5 leading-[1.3] text-justify">
+                              {docItem.title}
+                            </h4>
+                          </div>
+                        </div>
+                        <p className="font-sans text-[13.5px] text-[#444444] leading-relaxed text-justify mt-2 mb-4 whitespace-pre-line">
+                          {docItem.description}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-4 pt-4 border-t border-[#D8D0C0]/45 justify-between mt-auto">
+                        <span className="font-mono text-[9.5px] text-[#7A7A7A]">
+                          Registered: {new Date(docItem.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                        </span>
+                        <div className="flex gap-3">
+                          {docItem.link && (
+                            <a
+                              href={docItem.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-[#7A7A7A] hover:text-[#9B7A2F] uppercase tracking-wider"
+                            >
+                              Explore <ExternalLink size={10} />
+                            </a>
+                          )}
+                          {docItem.fileUrl && docItem.fileUrl !== '#' && (
+                            <a
+                              href={docItem.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11.5px] font-black text-[#121212] hover:text-[#9B7A2F] uppercase tracking-wider"
+                            >
+                              Download <Download size={11} />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Dynamic CMS-backed Media Gallery Section */}
+            {cmsGallery.length > 0 && (
+              <div id="cms-media-gallery-section" className="border-t border-[#D8D0C0] mt-24 pt-16 max-w-[960px] mx-auto px-6 sm:px-12 md:px-16 mb-12">
+                <div className="mb-10">
+                  <span className="font-sans text-[11px] font-bold tracking-[0.2em] text-[#9B7A2F] uppercase block mb-3 font-semibold">
+                    Press Media & Records
+                  </span>
+                  <h3 className="font-serif text-[28px] sm:text-[34px] font-black tracking-tight text-[#121212]">
+                    Media & Photo Gallery
+                  </h3>
+                  <p className="font-serif text-[15px] italic text-[#7A7A7A] leading-relaxed mt-2 text-justify">
+                    A photographic record of leadership briefs, summits, and national stakeholder engagements.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
+                  {cmsGallery.map((galItem) => (
+                    <motion.div
+                      key={galItem.id}
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      whileInView={{ opacity: 1, scale: 1 }}
+                      viewport={{ once: true }}
+                      className="group cursor-pointer overflow-hidden border border-[#D8D0C0] rounded-sm p-4 bg-white/40 shadow-xs hover:shadow-md transition-all flex flex-col"
+                    >
+                      {galItem.imageUrl ? (
+                        <div className="aspect-video w-full overflow-hidden bg-[#D8D0C0]/15 rounded-xs relative">
+                          <img
+                            src={galItem.imageUrl}
+                            alt={galItem.title}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      ) : (
+                        <div className="aspect-video w-full bg-[#9B7A2F]/5 flex flex-col justify-center items-center rounded-xs text-[#9B7A2F]/60">
+                          <ImageIcon size={32} />
+                          <span className="font-sans text-[10px] tracking-wider uppercase font-semibold mt-2">Media Snapshot</span>
+                        </div>
+                      )}
+                      
+                      <div className="mt-4 flex flex-col justify-between flex-grow">
+                        <div>
+                          <h4 className="font-serif text-[17px] font-bold text-[#121212] tracking-tight leading-[1.3] text-justify group-hover:text-[#9B7A2F] transition-colors">
+                            {galItem.title}
+                          </h4>
+                          <p className="font-sans text-[13px] text-[#444444] mt-2 leading-relaxed text-justify">
+                            {galItem.description}
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#D8D0C0]/30 mr-1 ml-0.5">
+                          <span className="font-mono text-[9px] text-[#7A7A7A]">
+                            Published: {new Date(galItem.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                          </span>
+                          {galItem.link && (
+                            <a
+                              href={galItem.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#9B7A2F] hover:text-[#121212] uppercase tracking-wider"
+                            >
+                              View Resource <ExternalLink size={10} />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

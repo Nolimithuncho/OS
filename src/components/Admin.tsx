@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LogOut, BookOpen, Users, MessageSquare, PlusCircle, CheckCircle, Trash2, Key, AlertCircle, FileText, Search, ShieldAlert, BadgeInfo, FolderEdit, Settings, Edit3, Image, FileUp, Globe, Eye, EyeOff, Loader2, Mail, ArrowRight } from 'lucide-react';
 import { Essay, Subscriber, MentorshipApp, Comment, User } from '../types';
 import { ContentItem, uploadFile, createContentItem, updateContentItem, deleteContentItem, isMockConfig, FirebaseAdmin, getAdmins, createAdmin, deleteAdmin, getAdminPassphrase, updateAdminPassphrase, getAdminUserByEmail } from '../lib/firebaseService';
-import { signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signOut, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 
 interface AdminProps {
@@ -327,7 +327,25 @@ export const Admin: React.FC<AdminProps> = ({
       if (cleanEmail) {
         // Find custom database-registered admin user
         const foundAdmin = await getAdminUserByEmail(cleanEmail);
-        if (foundAdmin && foundAdmin.password && passphrase.trim() === foundAdmin.password.trim()) {
+        const inputPassword = passphrase.trim();
+
+        if (foundAdmin && foundAdmin.password && inputPassword === foundAdmin.password.trim()) {
+          // If Firestore is real, authenticate in Firebase Auth
+          if (!isMockConfig) {
+            try {
+              await signInWithEmailAndPassword(auth, foundAdmin.email, inputPassword);
+            } catch (authErr: any) {
+              console.warn("Firebase email auth account not found or failed, attempts to auto-register: ", authErr);
+              if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential' || authErr.code === 'auth/invalid-login-credentials') {
+                try {
+                  await createUserWithEmailAndPassword(auth, foundAdmin.email, inputPassword);
+                } catch (createErr: any) {
+                  console.error("Could not register custom admin in Firebase Auth: ", createErr);
+                }
+              }
+            }
+          }
+
           setCurrentUser({
             role: 'admin',
             email: foundAdmin.email,
@@ -341,10 +359,27 @@ export const Admin: React.FC<AdminProps> = ({
       } else {
         // Fallback Admin passphrase match (dynamically checked against Firestore config)
         const dbPassphrase = await getAdminPassphrase();
-        if (passphrase.trim() === dbPassphrase) {
+        const inputPassword = passphrase.trim();
+
+        if (inputPassword === dbPassphrase) {
+          const fallbackEmail = 'admin@chancellery.org';
+          // Ensure we are signed into auth for fallback admin
+          if (!isMockConfig) {
+            try {
+              await signInWithEmailAndPassword(auth, fallbackEmail, inputPassword);
+            } catch (authErr: any) {
+              console.warn("Fallback auth account not found or failed, attempts to register: ", authErr);
+              try {
+                await createUserWithEmailAndPassword(auth, fallbackEmail, inputPassword);
+              } catch (createErr) {
+                console.error("Could not register fallback admin in Firebase Auth: ", createErr);
+              }
+            }
+          }
+
           setCurrentUser({
             role: 'admin',
-            email: 'admin@chancellery.org',
+            email: fallbackEmail,
             name: 'Osita Chidoka'
           });
           setLoginLoading(false);

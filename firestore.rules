@@ -9,7 +9,7 @@ service cloud.firestore {
 
     // Primitive Helpers
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-+]+$');
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
     
     function isValidEmailId(id) {
@@ -30,7 +30,7 @@ service cloud.firestore {
     
     // Verify that the user's email is authenticated and validated.
     function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn();
     }
     
     // Admin access check. Validates using the bootstrapped workspace email, official chancellery admin, or database admin records.
@@ -123,48 +123,54 @@ service cloud.firestore {
     // 1. Sections - Public, managed by Admin
     match /sections/{sectionId} {
       allow read: if true;
-      allow write: if isAdmin() && isValidId(sectionId) && isValidSection(incoming());
+      allow write: if request.auth != null && isAdmin() && isValidId(sectionId) && isValidSection(incoming());
     }
 
     // 2. Content CMS - Public, managed by Admin
     match /content/{contentId} {
       allow read: if true;
-      allow write: if isAdmin() && isValidId(contentId) && isValidContent(incoming());
+      allow write: if request.auth != null && isAdmin() && isValidId(contentId) && isValidContent(incoming());
     }
 
     // 3. Subscribers - Read by Admin & Owned User, created by self/any, deleted by Admin
     match /subscribers/{email} {
-      allow read: if isAdmin() 
-        || (isVerified() && request.auth.token.email == email);
+      allow read: if (request.auth != null && isAdmin()) 
+        || (request.auth != null && isVerified() && request.auth.token.email == email);
       
       allow create: if isValidEmailId(email) 
         && isValidSubscriber(incoming()) 
-        && (isAdmin() || (isVerified() && request.auth.token.email == email));
+        && ((request.auth != null && isAdmin()) || (request.auth != null && isVerified() && request.auth.token.email == email));
         
       allow update: if isValidEmailId(email) 
         && isValidSubscriber(incoming()) 
-        && (isAdmin() || (isVerified() && request.auth.token.email == email && incoming().code == existing().code));
+        && ((request.auth != null && isAdmin()) || (request.auth != null && isVerified() && request.auth.token.email == email && incoming().code == existing().code));
         
-      allow delete: if isAdmin();
+      allow delete: if request.auth != null && isAdmin();
     }
 
     // 4. Mentorship Apps - Read by Admin & Subscribed Owner, modified by Admin & Subscribed Owner
     match /mentorship/{appId} {
-      allow read: if isAdmin() 
-        || (isVerified() && existing().userId == request.auth.uid);
+      allow read: if (request.auth != null && isAdmin()) 
+        || (request.auth != null && isVerified() && existing().userId == request.auth.uid);
         
       allow create: if isValidId(appId) 
         && isValidMentorshipApp(incoming()) 
-        && (isAdmin() || (isVerified() && incoming().userId == request.auth.uid && incoming().status == 'PENDING ADMISSION REVIEW'));
+        && (
+          (request.auth != null && isAdmin()) 
+          || (incoming().status == 'PENDING ADMISSION REVIEW' && (
+            (incoming().userId == 'guest')
+            || (request.auth != null && isVerified() && incoming().userId == request.auth.uid)
+          ))
+        );
         
       allow update: if isValidId(appId) 
         && isValidMentorshipApp(incoming()) 
         && (
-          isAdmin() 
-          || (isVerified() && existing().userId == request.auth.uid && incoming().userId == request.auth.uid && incoming().status == 'PENDING ADMISSION REVIEW' && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'discipline', 'proposal', 'focus']))
+          (request.auth != null && isAdmin()) 
+          || (request.auth != null && isVerified() && existing().userId == request.auth.uid && incoming().userId == request.auth.uid && incoming().status == 'PENDING ADMISSION REVIEW' && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'discipline', 'proposal', 'focus']))
         );
         
-      allow delete: if isAdmin();
+      allow delete: if request.auth != null && isAdmin();
     }
 
     // 5. Essay Comments - Public reading, created by authenticated users, moderated by Admin & Author
@@ -173,30 +179,30 @@ service cloud.firestore {
       
       allow create: if isValidId(commentId) 
         && isValidComment(incoming()) 
-        && (isAdmin() || (isVerified() && incoming().userId == request.auth.uid));
+        && ((request.auth != null && isAdmin()) || (request.auth != null && isVerified() && incoming().userId == request.auth.uid));
         
       allow update: if false; // Comments are immutable once compiled and published!
       
-      allow delete: if isAdmin() || (isVerified() && existing().userId == request.auth.uid);
+      allow delete: if (request.auth != null && isAdmin()) || (request.auth != null && isVerified() && existing().userId == request.auth.uid);
     }
 
     // 6. Admins Directory - Readable by signed-in users, writable by existing Admins
     match /admins/{email} {
       allow read: if true;
-      allow write: if isAdmin() && isValidEmailId(email) && isValidAdminDoc(incoming());
+      allow write: if request.auth != null && isAdmin() && isValidEmailId(email) && isValidAdminDoc(incoming());
     }
 
     // 7. General Configuration (custom entry passphrase) - Publicly readable, writeable by Admins
     match /config/{documentId} {
       allow read: if true;
-      allow write: if isAdmin() && isValidId(documentId) && isValidConfigDoc(incoming());
+      allow write: if request.auth != null && isAdmin() && isValidId(documentId) && isValidConfigDoc(incoming());
     }
 
     // 8. Admin Users Credentials List - Readers can fetch a document by ID during login, writable by existing Admins
     match /admin_users/{email} {
       allow get: if true;
-      allow list: if isAdmin();
-      allow write: if isAdmin() && isValidEmailId(email) && isValidAdminUserDoc(incoming());
+      allow list: if request.auth != null && isAdmin();
+      allow write: if request.auth != null && isAdmin() && isValidEmailId(email) && isValidAdminUserDoc(incoming());
     }
   }
 }

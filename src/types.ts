@@ -65,3 +65,19 @@ export interface AdminUser {
   addedAt: string;
 }
 
+export interface ContentItem {
+  id: string;
+  section: 'about' | 'canon' | 'documents' | 'gallery';
+  title: string;
+  description: string;
+  fileUrl?: string;
+  fileType?: string; // 'image' | 'pdf' | 'file'
+  imageUrl?: string;
+  link?: string;
+  order: number;
+  status: 'published' | 'draft';
+  createdAt: string;
+  updatedAt: string;
+}
+
+
