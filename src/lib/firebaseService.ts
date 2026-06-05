@@ -517,6 +517,31 @@ export async function getMentorshipApps(isAdminUser?: boolean): Promise<Firebase
       ? isAdminUser 
       : (email.toLowerCase().trim() === 'japhetprosper13@gmail.com' || email.toLowerCase().trim() === 'admin@chancellery.org');
 
+    // Background sync of locally stored/offline applications up to Firestore database securely
+    try {
+      const cached = localStorage.getItem(LOCAL_MENTORSHIP_KEY);
+      if (cached) {
+        const localApps: FirebaseMentorshipApp[] = JSON.parse(cached);
+        for (const app of localApps) {
+          if (app.id) {
+            const docRef = doc(db, 'mentorship', app.id);
+            const docSnap = await getDoc(docRef);
+            if (!docSnap.exists()) {
+              console.log('Background syncing offline application to Firestore:', app.id);
+              await setDoc(docRef, {
+                ...app,
+                createdAt: app.createdAt || new Date().toISOString(),
+                status: app.status || 'PENDING ADMISSION REVIEW',
+                userId: app.userId !== 'guest' ? app.userId : (currentUid || 'guest')
+              });
+            }
+          }
+        }
+      }
+    } catch (syncErr) {
+      console.warn('Silent offline-to-cloud automatic syncing failed:', syncErr);
+    }
+
     let snapshot;
     if (isUserAdmin) {
       const colRef = collection(db, 'mentorship');

@@ -173,14 +173,14 @@ export default function App() {
       // 1. Fetch Subscribers from Firestore (available for fully registered elements)
       if (isAdminUser) {
         const subs = await getSubscribers();
-        if (subs && subs.length > 0) {
+        if (subs) {
           setSubscribersList(subs as any);
         }
       }
 
       // 2. Fetch Mentorship applications
       const apps = await getMentorshipApps(isAdminUser);
-      if (apps && apps.length > 0) {
+      if (apps) {
         setMentorshipApps(apps as any);
       }
 
